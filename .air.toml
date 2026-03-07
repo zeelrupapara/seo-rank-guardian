@@ -1,0 +1,19 @@
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  cmd = "go build -o ./tmp/main ."
+  bin = "tmp/main"
+  args_bin = ["start"]
+  include_ext = ["go", "tpl", "tmpl", "html", "conf"]
+  exclude_dir = ["tmp", "vendor", "docs"]
+  delay = 1000
+  log = "build-errors.log"
+  send_interrupt = true
+  kill_delay = 500
+
+[log]
+  time = false
+
+[misc]
+  clean_on_exit = true

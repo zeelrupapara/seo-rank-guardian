@@ -1,0 +1,288 @@
+basePath: /api/v1
+definitions:
+  http.HttpResponse:
+    properties:
+      code:
+        type: integer
+      data: {}
+      error:
+        type: string
+      message:
+        type: string
+      success:
+        type: boolean
+    type: object
+  v1.LoginRequest:
+    properties:
+      email:
+        type: string
+      password:
+        type: string
+    required:
+    - email
+    - password
+    type: object
+  v1.RefreshRequest:
+    properties:
+      refresh_token:
+        type: string
+    required:
+    - refresh_token
+    type: object
+  v1.RegisterRequest:
+    properties:
+      email:
+        type: string
+      password:
+        minLength: 8
+        type: string
+      username:
+        maxLength: 50
+        minLength: 3
+        type: string
+    required:
+    - email
+    - password
+    - username
+    type: object
+  v1.UpdateProfileRequest:
+    properties:
+      username:
+        maxLength: 50
+        minLength: 3
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact: {}
+  description: SEO Rank Guardian backend API with JWT auth, Google OAuth, and RBAC.
+  title: SEO Rank Guardian API
+  version: "1.0"
+paths:
+  /auth/google:
+    get:
+      description: Redirect to Google consent screen for authentication
+      produces:
+      - application/json
+      responses:
+        "307":
+          description: Redirect to Google
+          schema:
+            type: string
+      summary: Google OAuth login
+      tags:
+      - auth
+  /auth/google/callback:
+    get:
+      description: Handle Google OAuth callback, create or find user, return JWT tokens
+      parameters:
+      - description: OAuth state
+        in: query
+        name: state
+        required: true
+        type: string
+      - description: Authorization code
+        in: query
+        name: code
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/http.HttpResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/http.HttpResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/http.HttpResponse'
+      summary: Google OAuth callback
+      tags:
+      - auth
+  /auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Authenticate with email and password
+      parameters:
+      - description: Login request
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v1.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/http.HttpResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/http.HttpResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/http.HttpResponse'
+      summary: Login
+      tags:
+      - auth
+  /auth/logout:
+    delete:
+      description: Revoke the current user session
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/http.HttpResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/http.HttpResponse'
+      security:
+      - BearerAuth: []
+      summary: Logout
+      tags:
+      - auth
+  /auth/refresh:
+    post:
+      consumes:
+      - application/json
+      description: Get a new access token using a refresh token
+      parameters:
+      - description: Refresh request
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v1.RefreshRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/http.HttpResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/http.HttpResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/http.HttpResponse'
+      summary: Refresh token
+      tags:
+      - auth
+  /auth/register:
+    post:
+      consumes:
+      - application/json
+      description: Create a new user with email and password
+      parameters:
+      - description: Register request
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v1.RegisterRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/http.HttpResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/http.HttpResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/http.HttpResponse'
+      summary: Register a new user
+      tags:
+      - auth
+  /health:
+    get:
+      description: Check if the service is running
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/http.HttpResponse'
+      summary: Health check
+      tags:
+      - health
+  /users/me:
+    get:
+      description: Get the authenticated user's profile
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/http.HttpResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/http.HttpResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/http.HttpResponse'
+      security:
+      - BearerAuth: []
+      summary: Get current user profile
+      tags:
+      - users
+    put:
+      consumes:
+      - application/json
+      description: Update the authenticated user's profile
+      parameters:
+      - description: Update profile request
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v1.UpdateProfileRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/http.HttpResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/http.HttpResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/http.HttpResponse'
+      security:
+      - BearerAuth: []
+      summary: Update current user profile
+      tags:
+      - users
+securityDefinitions:
+  BearerAuth:
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

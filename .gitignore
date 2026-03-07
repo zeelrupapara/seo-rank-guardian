@@ -1,0 +1,56 @@
+# Environment and secrets
+.env
+.env.local
+.env.*.local
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+go.work
+go.work.sum
+vendor/
+
+# Build and Air (hot reload)
+tmp/
+build-errors.log
+
+# Logs
+logs/
+*.log
+
+# IDE and editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+ehthumbs.db
+
+# Coverage and profiling
+coverage.txt
+coverage.html
+*.prof
+*.pprof
+cpu.prof
+mem.prof
+
+# Docker
+.docker/
+
+# Local overrides (optional)
+compose.override.yml
+*.local.yml
