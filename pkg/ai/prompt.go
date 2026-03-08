@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 )
@@ -163,6 +164,30 @@ var ReportSchema = map[string]any{
 		},
 	},
 	"required": []string{"summary", "health_score", "critical_alerts", "keyword_rankings", "content_gaps", "recommendations", "competitor_insights"},
+}
+
+// WrapPromptForWebMode merges system instruction, user content, and JSON schema
+// into a single prompt string for the Gemini web UI (which has no separate
+// system instruction or schema enforcement fields).
+func WrapPromptForWebMode(systemInstruction, userContent string, schema map[string]any) string {
+	var b strings.Builder
+
+	if systemInstruction != "" {
+		fmt.Fprintf(&b, "=== SYSTEM INSTRUCTION ===\n%s\n\n", systemInstruction)
+	}
+
+	fmt.Fprintf(&b, "=== DATA ===\n%s\n\n", userContent)
+
+	if schema != nil {
+		schemaJSON, err := json.MarshalIndent(schema, "", "  ")
+		if err == nil {
+			fmt.Fprintf(&b, "=== RESPONSE JSON SCHEMA ===\n%s\n\n", string(schemaJSON))
+		}
+	}
+
+	b.WriteString("Respond with ONLY a valid JSON object matching the schema above. No markdown fences, no extra text. The first character must be { and the last must be }.")
+
+	return b.String()
 }
 
 // ReportResult is a simplified view of model.SearchResult for prompt building.

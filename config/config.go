@@ -77,6 +77,8 @@ type AIConfig struct {
 	APIKey          string `envconfig:"AI_API_KEY" default:""`
 	Model           string `envconfig:"AI_MODEL" default:"gemini-2.0-flash"`
 	SearchGrounding bool   `envconfig:"AI_SEARCH_GROUNDING" default:"true"`
+	ReportMode      string `envconfig:"REPORT_MODE" default:"api"`
+	WebTimeout      int    `envconfig:"GEMINI_WEB_TIMEOUT_SEC" default:"300"`
 }
 
 type GoogleConfig struct {

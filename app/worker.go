@@ -40,15 +40,29 @@ func StartWorker() error {
 	collySearcher := scraper.NewCollySearcher(cfg.Scraper, log)
 	chain := scraper.NewChainScraper(log, rodSearcher, collySearcher)
 
-	aiClient, err := ai.NewAIClient(ai.AIClientConfig{
-		Provider:        cfg.AI.Provider,
-		APIKey:          cfg.AI.APIKey,
-		Model:           cfg.AI.Model,
-		SearchGrounding: cfg.AI.SearchGrounding,
-	})
-	if err != nil {
-		log.Warnf("AI client init failed (reports will fail): %v", err)
-		aiClient = nil
+	var aiClient ai.AIClient
+	if cfg.AI.ReportMode == "scraper" {
+		aiClient, err = ai.NewGeminiWebScraper(ai.GeminiWebConfig{
+			TimeoutSec: cfg.AI.WebTimeout,
+			Logger:     log,
+		})
+		if err != nil {
+			log.Warnf("Gemini web scraper init failed (reports will fail): %v", err)
+			aiClient = nil
+		}
+		log.Info("AI report mode: scraper (gemini web UI)")
+	} else {
+		aiClient, err = ai.NewAIClient(ai.AIClientConfig{
+			Provider:        cfg.AI.Provider,
+			APIKey:          cfg.AI.APIKey,
+			Model:           cfg.AI.Model,
+			SearchGrounding: cfg.AI.SearchGrounding,
+		})
+		if err != nil {
+			log.Warnf("AI client init failed (reports will fail): %v", err)
+			aiClient = nil
+		}
+		log.Info("AI report mode: api")
 	}
 
 	w := worker.NewWorker(natsClient, pgDB.DB, log, chain, aiClient, cfg)
