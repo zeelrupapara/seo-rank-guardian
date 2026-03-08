@@ -88,7 +88,16 @@ func (o *OAuth2) ValidateRefreshToken(tokenStr string) (*TokenClaims, error) {
 
 	ctx := context.Background()
 	key := fmt.Sprintf("session:%d", claims.UserID)
-	stored, err := o.redis.Get(ctx, key).Result()
+
+	// Atomic get-and-delete to prevent token replay
+	pipe := o.redis.TxPipeline()
+	getCmd := pipe.Get(ctx, key)
+	pipe.Del(ctx, key)
+	if _, err := pipe.Exec(ctx); err != nil {
+		return nil, fmt.Errorf("invalid refresh token")
+	}
+
+	stored, err := getCmd.Result()
 	if err != nil || stored != tokenStr {
 		return nil, fmt.Errorf("invalid refresh token")
 	}

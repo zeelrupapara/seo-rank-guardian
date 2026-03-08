@@ -19,7 +19,7 @@ tidy:
 	go mod tidy
 
 swagger:
-	swag init
+	swag init --parseDependency --parseInternal
 
 docker-up:
 	docker compose up -d

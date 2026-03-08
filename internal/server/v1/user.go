@@ -17,9 +17,9 @@ type UpdateProfileRequest struct {
 // @Tags users
 // @Produce json
 // @Security BearerAuth
-// @Success 200 {object} http.HttpResponse
-// @Failure 401 {object} http.HttpResponse
-// @Failure 404 {object} http.HttpResponse
+// @Success 200 {object} UserResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
 // @Router /users/me [get]
 func (h *HttpServer) GetProfile(c *fiber.Ctx) error {
 	userID, ok := c.Locals("userId").(uint)
@@ -43,9 +43,9 @@ func (h *HttpServer) GetProfile(c *fiber.Ctx) error {
 // @Produce json
 // @Security BearerAuth
 // @Param body body UpdateProfileRequest true "Update profile request"
-// @Success 200 {object} http.HttpResponse
-// @Failure 400 {object} http.HttpResponse
-// @Failure 401 {object} http.HttpResponse
+// @Success 200 {object} UserResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 401 {object} ErrorResponse
 // @Router /users/me [put]
 func (h *HttpServer) UpdateProfile(c *fiber.Ctx) error {
 	userID, ok := c.Locals("userId").(uint)

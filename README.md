@@ -67,6 +67,24 @@ The server starts at `http://localhost:8080`.
 | `GET` | `/api/v1/users/me` | Get current user profile (requires auth) |
 | `PUT` | `/api/v1/users/me` | Update current user profile (requires auth) |
 
+### Jobs (SEO Tracking)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/api/v1/jobs` | Create a new job config (requires auth) |
+| `GET` | `/api/v1/jobs` | List all jobs (requires auth) |
+| `GET` | `/api/v1/jobs/:jobId` | Get job with summary stats (requires auth) |
+| `PUT` | `/api/v1/jobs/:jobId` | Full replace job config (requires auth) |
+| `DELETE` | `/api/v1/jobs/:jobId` | Delete a job (requires auth) |
+| `POST` | `/api/v1/jobs/:jobId/scrape` | Trigger manual scrape (requires auth) |
+
+### Runs
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/v1/jobs/:jobId/runs` | List run history (requires auth) |
+| `GET` | `/api/v1/jobs/:jobId/runs/:runId` | Get run detail with rankings, diffs, report (requires auth) |
+
 ### Request/Response Examples
 
 **Register**
@@ -91,6 +109,33 @@ curl -X POST http://localhost:8080/api/v1/auth/refresh \
 ```
 
 **Protected Endpoints** — pass `Authorization: Bearer <access_token>` header.
+
+**Create Job**
+```bash
+curl -X POST http://localhost:8080/api/v1/jobs \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <access_token>" \
+  -d '{
+    "name": "Fintech Georgia",
+    "domain": "fintech.com",
+    "schedule_time": "16:00",
+    "competitors": ["legalzoom.com", "nerdwallet.com"],
+    "keywords": ["financial advisor", "business loans"],
+    "regions": [{"country": "US", "state": "Georgia"}]
+  }'
+```
+
+**Trigger Scrape**
+```bash
+curl -X POST http://localhost:8080/api/v1/jobs/1/scrape \
+  -H "Authorization: Bearer <access_token>"
+```
+
+**Get Run Details**
+```bash
+curl http://localhost:8080/api/v1/jobs/1/runs/1 \
+  -H "Authorization: Bearer <access_token>"
+```
 
 **Google OAuth** — navigate to `/api/v1/auth/google` in a browser to start the OAuth flow. Requires `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` to be configured.
 
@@ -122,6 +167,12 @@ curl -X POST http://localhost:8080/api/v1/auth/refresh \
 | `GOOGLE_CLIENT_ID` | | Google OAuth client ID |
 | `GOOGLE_CLIENT_SECRET` | | Google OAuth client secret |
 | `GOOGLE_REDIRECT_URL` | `http://localhost:8080/api/v1/auth/google/callback` | Google OAuth redirect URL |
+| `AI_PROVIDER` | `gemini` | AI provider for reports |
+| `AI_API_KEY` | | AI provider API key |
+| `SCRAPE_RESULT_LIMIT` | `10` | Max Google results per query |
+| `SCRAPE_MIN_DELAY_MS` | `3000` | Min delay between scrapes (ms) |
+| `SCRAPE_MAX_DELAY_MS` | `7000` | Max delay between scrapes (ms) |
+| `SCRAPE_MAX_RETRIES` | `3` | Max retries per scrape |
 
 ## Project Structure
 
@@ -135,17 +186,20 @@ curl -X POST http://localhost:8080/api/v1/auth/refresh \
 │   └── server/     # HTTP server and route handlers
 ├── model/          # GORM models
 ├── pkg/
+│   ├── ai/         # AI client (Gemini)
 │   ├── authz/      # Casbin authorization
 │   ├── cache/      # Redis cache wrapper
 │   ├── db/         # PostgreSQL connection
+│   ├── errors/     # Application errors
 │   ├── http/       # Fiber app setup and response helpers
 │   ├── logger/     # Zap logger
 │   ├── nats/       # NATS client
 │   ├── oauth2/     # JWT token management and Google OAuth
 │   ├── redis/      # Redis client
+│   ├── scraper/    # Google SERP scraper (Colly)
 │   └── seed/       # Database seeding
 ├── utils/          # Utility functions
-├── worker/         # Background workers
+├── worker/         # Background workers (scrape, detect, report)
 ├── compose.yml     # Docker Compose (PostgreSQL, Redis, NATS)
 ├── Dockerfile      # Container build
 └── Makefile        # Build commands

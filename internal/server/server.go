@@ -6,6 +6,7 @@ import (
 	"github.com/zeelrupapara/seo-rank-guardian/internal/middleware"
 	v1 "github.com/zeelrupapara/seo-rank-guardian/internal/server/v1"
 	"github.com/zeelrupapara/seo-rank-guardian/pkg/cache"
+	"github.com/zeelrupapara/seo-rank-guardian/pkg/manager"
 	natspkg "github.com/zeelrupapara/seo-rank-guardian/pkg/nats"
 	"github.com/zeelrupapara/seo-rank-guardian/pkg/oauth2"
 	"go.uber.org/zap"
@@ -34,8 +35,9 @@ func NewServer(
 	o *oauth2.OAuth2,
 	nats *natspkg.NatsClient,
 	googleOAuth *oauth2.GoogleOAuth,
+	hub *manager.Hub,
 ) *Server {
-	httpServer := v1.NewHttpServer(app, mw, db, cache, log, validate, cfg, o, nats, googleOAuth)
+	httpServer := v1.NewHttpServer(app, mw, db, cache, log, validate, cfg, o, nats, googleOAuth, hub)
 
 	return &Server{
 		App:        app,

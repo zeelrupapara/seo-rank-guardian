@@ -35,9 +35,9 @@ type RefreshRequest struct {
 // @Accept json
 // @Produce json
 // @Param body body RegisterRequest true "Register request"
-// @Success 201 {object} http.HttpResponse
-// @Failure 400 {object} http.HttpResponse
-// @Failure 409 {object} http.HttpResponse
+// @Success 201 {object} AuthResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 409 {object} ErrorResponse
 // @Router /auth/register [post]
 func (h *HttpServer) Register(c *fiber.Ctx) error {
 	var req RegisterRequest
@@ -46,12 +46,12 @@ func (h *HttpServer) Register(c *fiber.Ctx) error {
 	}
 
 	if err := h.Validate.Struct(req); err != nil {
-		return httputil.ErrorResponse(c, fiber.StatusBadRequest, err.Error(), "Validation failed")
+		return httputil.ErrorResponse(c, fiber.StatusBadRequest, apperrors.ErrBadRequest.Error(), "Validation failed")
 	}
 
 	var existing model.User
 	if err := h.DB.Where("email = ?", req.Email).First(&existing).Error; err == nil {
-		return httputil.ErrorResponse(c, fiber.StatusConflict, apperrors.ErrUserAlreadyExist.Error(), "User already exists")
+		return httputil.ErrorResponse(c, fiber.StatusConflict, apperrors.ErrBadRequest.Error(), "Unable to create account with provided details")
 	}
 
 	hashedPassword, err := utils.HashPassword(req.Password)
@@ -89,9 +89,9 @@ func (h *HttpServer) Register(c *fiber.Ctx) error {
 // @Accept json
 // @Produce json
 // @Param body body LoginRequest true "Login request"
-// @Success 200 {object} http.HttpResponse
-// @Failure 400 {object} http.HttpResponse
-// @Failure 401 {object} http.HttpResponse
+// @Success 200 {object} AuthResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 401 {object} ErrorResponse
 // @Router /auth/login [post]
 func (h *HttpServer) Login(c *fiber.Ctx) error {
 	var req LoginRequest
@@ -100,7 +100,7 @@ func (h *HttpServer) Login(c *fiber.Ctx) error {
 	}
 
 	if err := h.Validate.Struct(req); err != nil {
-		return httputil.ErrorResponse(c, fiber.StatusBadRequest, err.Error(), "Validation failed")
+		return httputil.ErrorResponse(c, fiber.StatusBadRequest, apperrors.ErrBadRequest.Error(), "Validation failed")
 	}
 
 	var user model.User
@@ -110,6 +110,10 @@ func (h *HttpServer) Login(c *fiber.Ctx) error {
 
 	if !utils.CheckPassword(user.Password, req.Password) {
 		return httputil.ErrorResponse(c, fiber.StatusUnauthorized, apperrors.ErrInvalidPassword.Error(), "Invalid credentials")
+	}
+
+	if !user.IsActive {
+		return httputil.ErrorResponse(c, fiber.StatusForbidden, apperrors.ErrForbidden.Error(), "Account is deactivated")
 	}
 
 	tokens, err := h.OAuth2.GenerateTokenPair(user.ID, user.Role)
@@ -130,9 +134,9 @@ func (h *HttpServer) Login(c *fiber.Ctx) error {
 // @Accept json
 // @Produce json
 // @Param body body RefreshRequest true "Refresh request"
-// @Success 200 {object} http.HttpResponse
-// @Failure 400 {object} http.HttpResponse
-// @Failure 401 {object} http.HttpResponse
+// @Success 200 {object} TokenResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 401 {object} ErrorResponse
 // @Router /auth/refresh [post]
 func (h *HttpServer) RefreshToken(c *fiber.Ctx) error {
 	var req RefreshRequest
@@ -141,7 +145,7 @@ func (h *HttpServer) RefreshToken(c *fiber.Ctx) error {
 	}
 
 	if err := h.Validate.Struct(req); err != nil {
-		return httputil.ErrorResponse(c, fiber.StatusBadRequest, err.Error(), "Validation failed")
+		return httputil.ErrorResponse(c, fiber.StatusBadRequest, apperrors.ErrBadRequest.Error(), "Validation failed")
 	}
 
 	claims, err := h.OAuth2.ValidateRefreshToken(req.RefreshToken)
@@ -191,9 +195,9 @@ func (h *HttpServer) GoogleLogin(c *fiber.Ctx) error {
 // @Produce json
 // @Param state query string true "OAuth state"
 // @Param code query string true "Authorization code"
-// @Success 200 {object} http.HttpResponse
-// @Failure 400 {object} http.HttpResponse
-// @Failure 500 {object} http.HttpResponse
+// @Success 200 {object} AuthResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
 // @Router /auth/google/callback [get]
 func (h *HttpServer) GoogleCallback(c *fiber.Ctx) error {
 	if h.GoogleOAuth == nil {
@@ -226,12 +230,16 @@ func (h *HttpServer) GoogleCallback(c *fiber.Ctx) error {
 		return httputil.ErrorResponse(c, fiber.StatusInternalServerError, apperrors.ErrInternalServer.Error(), "Failed to get user info")
 	}
 
+	if !info.EmailVerified {
+		return httputil.ErrorResponse(c, fiber.StatusBadRequest, apperrors.ErrBadRequest.Error(), "Google email is not verified")
+	}
+
 	var user model.User
 
 	// 1. Look up by provider + provider_id
 	result := h.DB.Where("provider = ? AND provider_id = ?", "google", info.Sub).First(&user)
 	if result.Error != nil {
-		// 2. Look up by email (link accounts)
+		// 2. Look up by email — only link if account was created via Google (prevent takeover of local accounts)
 		result = h.DB.Where("email = ?", info.Email).First(&user)
 		if result.Error != nil {
 			// 3. Create new user
@@ -246,12 +254,20 @@ func (h *HttpServer) GoogleCallback(c *fiber.Ctx) error {
 			if err := h.DB.Create(&user).Error; err != nil {
 				return httputil.ErrorResponse(c, fiber.StatusInternalServerError, apperrors.ErrInternalServer.Error(), "Failed to create user")
 			}
-		} else {
-			// Link existing local account with Google
-			user.Provider = "google"
+		} else if user.Provider == "google" {
+			// Link Google account only if user was already a Google user (different Google account)
 			user.ProviderID = info.Sub
-			h.DB.Save(&user)
+			if err := h.DB.Save(&user).Error; err != nil {
+				return httputil.ErrorResponse(c, fiber.StatusInternalServerError, apperrors.ErrInternalServer.Error(), "Failed to link account")
+			}
+		} else {
+			// Local account exists with this email — do NOT auto-link, require manual linking
+			return httputil.ErrorResponse(c, fiber.StatusConflict, apperrors.ErrConflict.Error(), "An account with this email already exists. Please login with your password.")
 		}
+	}
+
+	if !user.IsActive {
+		return httputil.ErrorResponse(c, fiber.StatusForbidden, apperrors.ErrForbidden.Error(), "Account is deactivated")
 	}
 
 	tokens, err := h.OAuth2.GenerateTokenPair(user.ID, user.Role)
@@ -271,8 +287,8 @@ func (h *HttpServer) GoogleCallback(c *fiber.Ctx) error {
 // @Tags auth
 // @Produce json
 // @Security BearerAuth
-// @Success 200 {object} http.HttpResponse
-// @Failure 401 {object} http.HttpResponse
+// @Success 200 {object} MessageResponse
+// @Failure 401 {object} ErrorResponse
 // @Router /auth/logout [delete]
 func (h *HttpServer) Logout(c *fiber.Ctx) error {
 	userID, ok := c.Locals("userId").(uint)

@@ -15,6 +15,7 @@ import (
 	"github.com/zeelrupapara/seo-rank-guardian/pkg/db"
 	httputil "github.com/zeelrupapara/seo-rank-guardian/pkg/http"
 	"github.com/zeelrupapara/seo-rank-guardian/pkg/logger"
+	"github.com/zeelrupapara/seo-rank-guardian/pkg/manager"
 	natspkg "github.com/zeelrupapara/seo-rank-guardian/pkg/nats"
 	pkgoauth2 "github.com/zeelrupapara/seo-rank-guardian/pkg/oauth2"
 	redispkg "github.com/zeelrupapara/seo-rank-guardian/pkg/redis"
@@ -53,6 +54,18 @@ func Start() error {
 		return err
 	}
 
+	if err := natsClient.EnsureStream("SRG_JOBS", []string{"srg.jobs.>"}); err != nil {
+		return err
+	}
+
+	if err := natsClient.EnsureStream("SRG_LOGS", []string{"srg.logs.>"}); err != nil {
+		return err
+	}
+
+	if err := natsClient.EnsureStream("SRG_WS", []string{"srg.ws.>"}); err != nil {
+		return err
+	}
+
 	az, err := authz.NewAuthz(pgDB.DB, "pkg/authz/model.conf", log)
 	if err != nil {
 		return err
@@ -75,10 +88,12 @@ func Start() error {
 
 	validate := validator.New()
 
+	hub := manager.NewHub(log)
+
 	app := httputil.NewApp()
 	mw := middleware.NewMiddleware(app, pgDB.DB, az, o, log)
 
-	srv := server.NewServer(app, mw, pgDB.DB, appCache, log, validate, cfg, o, natsClient, googleOAuth)
+	srv := server.NewServer(app, mw, pgDB.DB, appCache, log, validate, cfg, o, natsClient, googleOAuth, hub)
 	srv.Register()
 
 	quit := make(chan os.Signal, 1)

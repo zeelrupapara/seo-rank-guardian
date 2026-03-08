@@ -1,15 +1,401 @@
 basePath: /api/v1
 definitions:
-  http.HttpResponse:
+  gorm.DeletedAt:
+    properties:
+      time:
+        type: string
+      valid:
+        description: Valid is true if Time is not NULL
+        type: boolean
+    type: object
+  model.Job:
+    properties:
+      competitors:
+        items:
+          type: string
+        type: array
+      created_at:
+        type: string
+      created_by:
+        type: integer
+      deleted_at:
+        $ref: '#/definitions/gorm.DeletedAt'
+      domain:
+        type: string
+      id:
+        type: integer
+      is_active:
+        type: boolean
+      keywords:
+        items:
+          type: string
+        type: array
+      name:
+        type: string
+      regions:
+        type: string
+      schedule_time:
+        type: string
+      updated_at:
+        type: string
+      updated_by:
+        type: integer
+      user_id:
+        type: integer
+    type: object
+  model.JobRegion:
+    properties:
+      city:
+        type: string
+      country:
+        type: string
+      state:
+        type: string
+    type: object
+  model.JobRun:
+    properties:
+      completed_at:
+        type: string
+      completed_pairs:
+        type: integer
+      created_at:
+        type: string
+      created_by:
+        type: integer
+      deleted_at:
+        $ref: '#/definitions/gorm.DeletedAt'
+      failed_pairs:
+        type: integer
+      id:
+        type: integer
+      job_id:
+        type: integer
+      started_at:
+        type: string
+      status:
+        type: string
+      total_pairs:
+        type: integer
+      triggered_by:
+        type: string
+      updated_at:
+        type: string
+      updated_by:
+        type: integer
+    type: object
+  model.RankDiff:
+    properties:
+      change_type:
+        type: string
+      created_at:
+        type: string
+      created_by:
+        type: integer
+      curr_position:
+        type: integer
+      deleted_at:
+        $ref: '#/definitions/gorm.DeletedAt'
+      delta:
+        type: integer
+      domain:
+        type: string
+      id:
+        type: integer
+      job_id:
+        type: integer
+      keyword:
+        type: string
+      prev_position:
+        type: integer
+      prev_run_id:
+        type: integer
+      run_id:
+        type: integer
+      state:
+        type: string
+      updated_at:
+        type: string
+      updated_by:
+        type: integer
+    type: object
+  model.Report:
+    properties:
+      created_at:
+        type: string
+      created_by:
+        type: integer
+      deleted_at:
+        $ref: '#/definitions/gorm.DeletedAt'
+      id:
+        type: integer
+      job_id:
+        type: integer
+      prompt:
+        type: string
+      provider:
+        type: string
+      result:
+        type: object
+      run_id:
+        type: integer
+      status:
+        type: string
+      updated_at:
+        type: string
+      updated_by:
+        type: integer
+    type: object
+  model.SearchPair:
+    properties:
+      country:
+        type: string
+      created_at:
+        type: string
+      created_by:
+        type: integer
+      deleted_at:
+        $ref: '#/definitions/gorm.DeletedAt'
+      error_msg:
+        type: string
+      finished_at:
+        type: string
+      id:
+        type: integer
+      job_id:
+        type: integer
+      keyword:
+        type: string
+      run_id:
+        type: integer
+      search_query:
+        type: string
+      started_at:
+        type: string
+      state:
+        type: string
+      status:
+        type: string
+      updated_at:
+        type: string
+      updated_by:
+        type: integer
+    type: object
+  model.SearchResult:
+    properties:
+      created_at:
+        type: string
+      created_by:
+        type: integer
+      deleted_at:
+        $ref: '#/definitions/gorm.DeletedAt'
+      domain:
+        type: string
+      id:
+        type: integer
+      is_competitor:
+        type: boolean
+      is_target:
+        type: boolean
+      job_id:
+        type: integer
+      keyword:
+        type: string
+      pair_id:
+        type: integer
+      position:
+        type: integer
+      run_id:
+        type: integer
+      snippet:
+        type: string
+      state:
+        type: string
+      title:
+        type: string
+      updated_at:
+        type: string
+      updated_by:
+        type: integer
+      url:
+        type: string
+    type: object
+  model.User:
+    properties:
+      created_at:
+        type: string
+      created_by:
+        type: integer
+      deleted_at:
+        $ref: '#/definitions/gorm.DeletedAt'
+      email:
+        type: string
+      id:
+        type: integer
+      is_active:
+        type: boolean
+      provider:
+        type: string
+      provider_id:
+        type: string
+      role:
+        type: string
+      updated_at:
+        type: string
+      updated_by:
+        type: integer
+      username:
+        type: string
+    type: object
+  oauth2.TokenPair:
+    properties:
+      access_token:
+        type: string
+      refresh_token:
+        type: string
+    type: object
+  v1.AuthData:
+    properties:
+      tokens:
+        $ref: '#/definitions/oauth2.TokenPair'
+      user:
+        $ref: '#/definitions/model.User'
+    type: object
+  v1.AuthResponse:
     properties:
       code:
+        example: 200
         type: integer
-      data: {}
-      error:
-        type: string
+      data:
+        $ref: '#/definitions/v1.AuthData'
       message:
+        example: Login successful
         type: string
       success:
+        example: true
+        type: boolean
+    type: object
+  v1.ErrorResponse:
+    properties:
+      code:
+        example: 400
+        type: integer
+      error:
+        example: bad request
+        type: string
+      message:
+        example: Something went wrong
+        type: string
+      success:
+        example: false
+        type: boolean
+    type: object
+  v1.HealthData:
+    properties:
+      status:
+        example: ok
+        type: string
+    type: object
+  v1.HealthResponse:
+    properties:
+      code:
+        example: 200
+        type: integer
+      data:
+        $ref: '#/definitions/v1.HealthData'
+      message:
+        example: Service is healthy
+        type: string
+      success:
+        example: true
+        type: boolean
+    type: object
+  v1.JobDetailData:
+    properties:
+      job:
+        $ref: '#/definitions/model.Job'
+      last_run:
+        $ref: '#/definitions/model.JobRun'
+      total_runs:
+        example: 5
+        type: integer
+    type: object
+  v1.JobDetailResponse:
+    properties:
+      code:
+        example: 200
+        type: integer
+      data:
+        $ref: '#/definitions/v1.JobDetailData'
+      message:
+        example: Job retrieved successfully
+        type: string
+      success:
+        example: true
+        type: boolean
+    type: object
+  v1.JobListResponse:
+    properties:
+      code:
+        example: 200
+        type: integer
+      data:
+        items:
+          $ref: '#/definitions/model.Job'
+        type: array
+      message:
+        example: Jobs retrieved successfully
+        type: string
+      success:
+        example: true
+        type: boolean
+    type: object
+  v1.JobRequest:
+    properties:
+      competitors:
+        items:
+          type: string
+        type: array
+      domain:
+        maxLength: 255
+        minLength: 1
+        type: string
+      is_active:
+        type: boolean
+      keywords:
+        items:
+          type: string
+        minItems: 1
+        type: array
+      name:
+        maxLength: 255
+        minLength: 1
+        type: string
+      regions:
+        items:
+          $ref: '#/definitions/model.JobRegion'
+        minItems: 1
+        type: array
+      schedule_time:
+        maxLength: 10
+        type: string
+    required:
+    - domain
+    - keywords
+    - name
+    - regions
+    type: object
+  v1.JobResponse:
+    properties:
+      code:
+        example: 200
+        type: integer
+      data:
+        $ref: '#/definitions/model.Job'
+      message:
+        example: Job created successfully
+        type: string
+      success:
+        example: true
         type: boolean
     type: object
   v1.LoginRequest:
@@ -21,6 +407,18 @@ definitions:
     required:
     - email
     - password
+    type: object
+  v1.MessageResponse:
+    properties:
+      code:
+        example: 200
+        type: integer
+      message:
+        example: Operation successful
+        type: string
+      success:
+        example: true
+        type: boolean
     type: object
   v1.RefreshRequest:
     properties:
@@ -45,12 +443,111 @@ definitions:
     - password
     - username
     type: object
+  v1.RunDetailData:
+    properties:
+      diffs:
+        items:
+          $ref: '#/definitions/model.RankDiff'
+        type: array
+      pairs:
+        items:
+          $ref: '#/definitions/model.SearchPair'
+        type: array
+      report:
+        $ref: '#/definitions/model.Report'
+      results:
+        items:
+          $ref: '#/definitions/model.SearchResult'
+        type: array
+      run:
+        $ref: '#/definitions/model.JobRun'
+    type: object
+  v1.RunDetailResponse:
+    properties:
+      code:
+        example: 200
+        type: integer
+      data:
+        $ref: '#/definitions/v1.RunDetailData'
+      message:
+        example: Run details retrieved successfully
+        type: string
+      success:
+        example: true
+        type: boolean
+    type: object
+  v1.RunListResponse:
+    properties:
+      code:
+        example: 200
+        type: integer
+      data:
+        items:
+          $ref: '#/definitions/model.JobRun'
+        type: array
+      message:
+        example: Runs retrieved successfully
+        type: string
+      success:
+        example: true
+        type: boolean
+    type: object
+  v1.ScrapeData:
+    properties:
+      run:
+        $ref: '#/definitions/model.JobRun'
+      total_pairs:
+        example: 4
+        type: integer
+    type: object
+  v1.ScrapeResponse:
+    properties:
+      code:
+        example: 201
+        type: integer
+      data:
+        $ref: '#/definitions/v1.ScrapeData'
+      message:
+        example: Scrape triggered successfully
+        type: string
+      success:
+        example: true
+        type: boolean
+    type: object
+  v1.TokenResponse:
+    properties:
+      code:
+        example: 200
+        type: integer
+      data:
+        $ref: '#/definitions/oauth2.TokenPair'
+      message:
+        example: Token refreshed successfully
+        type: string
+      success:
+        example: true
+        type: boolean
+    type: object
   v1.UpdateProfileRequest:
     properties:
       username:
         maxLength: 50
         minLength: 3
         type: string
+    type: object
+  v1.UserResponse:
+    properties:
+      code:
+        example: 200
+        type: integer
+      data:
+        $ref: '#/definitions/model.User'
+      message:
+        example: Profile retrieved
+        type: string
+      success:
+        example: true
+        type: boolean
     type: object
 host: localhost:8080
 info:
@@ -92,15 +589,15 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/http.HttpResponse'
+            $ref: '#/definitions/v1.AuthResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/http.HttpResponse'
+            $ref: '#/definitions/v1.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/http.HttpResponse'
+            $ref: '#/definitions/v1.ErrorResponse'
       summary: Google OAuth callback
       tags:
       - auth
@@ -122,15 +619,15 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/http.HttpResponse'
+            $ref: '#/definitions/v1.AuthResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/http.HttpResponse'
+            $ref: '#/definitions/v1.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.HttpResponse'
+            $ref: '#/definitions/v1.ErrorResponse'
       summary: Login
       tags:
       - auth
@@ -143,11 +640,11 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/http.HttpResponse'
+            $ref: '#/definitions/v1.MessageResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.HttpResponse'
+            $ref: '#/definitions/v1.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Logout
@@ -171,15 +668,15 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/http.HttpResponse'
+            $ref: '#/definitions/v1.TokenResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/http.HttpResponse'
+            $ref: '#/definitions/v1.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.HttpResponse'
+            $ref: '#/definitions/v1.ErrorResponse'
       summary: Refresh token
       tags:
       - auth
@@ -201,15 +698,15 @@ paths:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/http.HttpResponse'
+            $ref: '#/definitions/v1.AuthResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/http.HttpResponse'
+            $ref: '#/definitions/v1.ErrorResponse'
         "409":
           description: Conflict
           schema:
-            $ref: '#/definitions/http.HttpResponse'
+            $ref: '#/definitions/v1.ErrorResponse'
       summary: Register a new user
       tags:
       - auth
@@ -222,10 +719,273 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/http.HttpResponse'
+            $ref: '#/definitions/v1.HealthResponse'
       summary: Health check
       tags:
       - health
+  /jobs:
+    get:
+      description: List all SEO tracking jobs for the authenticated user
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.JobListResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List all jobs
+      tags:
+      - jobs
+    post:
+      consumes:
+      - application/json
+      description: Create a new SEO tracking job configuration
+      parameters:
+      - description: Job configuration
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v1.JobRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/v1.JobResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create a new job
+      tags:
+      - jobs
+  /jobs/{jobId}:
+    delete:
+      description: Soft delete a job configuration
+      parameters:
+      - description: Job ID
+        in: path
+        name: jobId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.MessageResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete a job
+      tags:
+      - jobs
+    get:
+      description: Get a specific job configuration with summary stats
+      parameters:
+      - description: Job ID
+        in: path
+        name: jobId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.JobDetailResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get a job
+      tags:
+      - jobs
+    put:
+      consumes:
+      - application/json
+      description: Full replace of a job configuration
+      parameters:
+      - description: Job ID
+        in: path
+        name: jobId
+        required: true
+        type: integer
+      - description: Job configuration
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v1.JobRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.JobResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update a job
+      tags:
+      - jobs
+  /jobs/{jobId}/runs:
+    get:
+      description: List all scrape runs for a specific job
+      parameters:
+      - description: Job ID
+        in: path
+        name: jobId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.RunListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List runs for a job
+      tags:
+      - runs
+  /jobs/{jobId}/runs/{runId}:
+    get:
+      description: Get detailed run results including rankings, diffs, and AI report
+      parameters:
+      - description: Job ID
+        in: path
+        name: jobId
+        required: true
+        type: integer
+      - description: Run ID
+        in: path
+        name: runId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.RunDetailResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get run details
+      tags:
+      - runs
+  /jobs/{jobId}/scrape:
+    post:
+      description: Manually trigger a scrape run for a job
+      parameters:
+      - description: Job ID
+        in: path
+        name: jobId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/v1.ScrapeResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Trigger a scrape
+      tags:
+      - jobs
   /users/me:
     get:
       description: Get the authenticated user's profile
@@ -235,15 +995,15 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/http.HttpResponse'
+            $ref: '#/definitions/v1.UserResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.HttpResponse'
+            $ref: '#/definitions/v1.ErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/http.HttpResponse'
+            $ref: '#/definitions/v1.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Get current user profile
@@ -266,15 +1026,15 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/http.HttpResponse'
+            $ref: '#/definitions/v1.UserResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/http.HttpResponse'
+            $ref: '#/definitions/v1.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/http.HttpResponse'
+            $ref: '#/definitions/v1.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Update current user profile

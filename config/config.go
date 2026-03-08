@@ -16,6 +16,7 @@ type Config struct {
 	SMTP     SMTPConfig
 	AI       AIConfig
 	Google   GoogleConfig
+	Scraper  ScraperConfig
 }
 
 type AppConfig struct {
@@ -72,14 +73,24 @@ type SMTPConfig struct {
 }
 
 type AIConfig struct {
-	Provider string `envconfig:"AI_PROVIDER" default:"gemini"`
-	APIKey   string `envconfig:"AI_API_KEY" default:""`
+	Provider        string `envconfig:"AI_PROVIDER" default:"gemini"`
+	APIKey          string `envconfig:"AI_API_KEY" default:""`
+	Model           string `envconfig:"AI_MODEL" default:"gemini-2.0-flash"`
+	SearchGrounding bool   `envconfig:"AI_SEARCH_GROUNDING" default:"true"`
 }
 
 type GoogleConfig struct {
 	ClientID     string `envconfig:"GOOGLE_CLIENT_ID" default:""`
 	ClientSecret string `envconfig:"GOOGLE_CLIENT_SECRET" default:""`
 	RedirectURL  string `envconfig:"GOOGLE_REDIRECT_URL" default:"http://localhost:8080/api/v1/auth/google/callback"`
+}
+
+type ScraperConfig struct {
+	ResultLimit int  `envconfig:"SCRAPE_RESULT_LIMIT" default:"10"`
+	MinDelayMs  int  `envconfig:"SCRAPE_MIN_DELAY_MS" default:"10000"`
+	MaxDelayMs  int  `envconfig:"SCRAPE_MAX_DELAY_MS" default:"20000"`
+	MaxRetries  int  `envconfig:"SCRAPE_MAX_RETRIES" default:"3"`
+	RodEnabled  bool `envconfig:"SCRAPE_ROD_ENABLED" default:"true"`
 }
 
 func Load() (*Config, error) {
@@ -115,6 +126,9 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 	if err := envconfig.Process("", &cfg.Google); err != nil {
+		return nil, err
+	}
+	if err := envconfig.Process("", &cfg.Scraper); err != nil {
 		return nil, err
 	}
 

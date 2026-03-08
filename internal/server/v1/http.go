@@ -1,11 +1,14 @@
 package v1
 
 import (
+	"strconv"
+
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
 	"github.com/zeelrupapara/seo-rank-guardian/config"
 	"github.com/zeelrupapara/seo-rank-guardian/internal/middleware"
 	"github.com/zeelrupapara/seo-rank-guardian/pkg/cache"
+	"github.com/zeelrupapara/seo-rank-guardian/pkg/manager"
 	natspkg "github.com/zeelrupapara/seo-rank-guardian/pkg/nats"
 	"github.com/zeelrupapara/seo-rank-guardian/pkg/oauth2"
 	"go.uber.org/zap"
@@ -23,6 +26,7 @@ type HttpServer struct {
 	OAuth2      *oauth2.OAuth2
 	Nats        *natspkg.NatsClient
 	GoogleOAuth *oauth2.GoogleOAuth
+	Hub         *manager.Hub
 }
 
 func NewHttpServer(
@@ -36,6 +40,7 @@ func NewHttpServer(
 	o *oauth2.OAuth2,
 	nats *natspkg.NatsClient,
 	googleOAuth *oauth2.GoogleOAuth,
+	hub *manager.Hub,
 ) *HttpServer {
 	return &HttpServer{
 		App:         app,
@@ -48,5 +53,18 @@ func NewHttpServer(
 		OAuth2:      o,
 		Nats:        nats,
 		GoogleOAuth: googleOAuth,
+		Hub:         hub,
 	}
+}
+
+func parsePagination(c *fiber.Ctx) (page, pageSize int) {
+	page, _ = strconv.Atoi(c.Query("page", "1"))
+	pageSize, _ = strconv.Atoi(c.Query("limit", "20"))
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 20
+	}
+	return
 }

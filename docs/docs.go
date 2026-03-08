@@ -65,19 +65,19 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/http.HttpResponse"
+                            "$ref": "#/definitions/v1.AuthResponse"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/http.HttpResponse"
+                            "$ref": "#/definitions/v1.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/http.HttpResponse"
+                            "$ref": "#/definitions/v1.ErrorResponse"
                         }
                     }
                 }
@@ -111,19 +111,19 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/http.HttpResponse"
+                            "$ref": "#/definitions/v1.AuthResponse"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/http.HttpResponse"
+                            "$ref": "#/definitions/v1.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.HttpResponse"
+                            "$ref": "#/definitions/v1.ErrorResponse"
                         }
                     }
                 }
@@ -148,13 +148,13 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/http.HttpResponse"
+                            "$ref": "#/definitions/v1.MessageResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.HttpResponse"
+                            "$ref": "#/definitions/v1.ErrorResponse"
                         }
                     }
                 }
@@ -188,19 +188,19 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/http.HttpResponse"
+                            "$ref": "#/definitions/v1.TokenResponse"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/http.HttpResponse"
+                            "$ref": "#/definitions/v1.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.HttpResponse"
+                            "$ref": "#/definitions/v1.ErrorResponse"
                         }
                     }
                 }
@@ -234,19 +234,19 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/http.HttpResponse"
+                            "$ref": "#/definitions/v1.AuthResponse"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/http.HttpResponse"
+                            "$ref": "#/definitions/v1.ErrorResponse"
                         }
                     },
                     "409": {
                         "description": "Conflict",
                         "schema": {
-                            "$ref": "#/definitions/http.HttpResponse"
+                            "$ref": "#/definitions/v1.ErrorResponse"
                         }
                     }
                 }
@@ -266,7 +266,420 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/http.HttpResponse"
+                            "$ref": "#/definitions/v1.HealthResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/jobs": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "List all SEO tracking jobs for the authenticated user",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "jobs"
+                ],
+                "summary": "List all jobs",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v1.JobListResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/v1.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Create a new SEO tracking job configuration",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "jobs"
+                ],
+                "summary": "Create a new job",
+                "parameters": [
+                    {
+                        "description": "Job configuration",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v1.JobRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/v1.JobResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/v1.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/v1.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/jobs/{jobId}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Get a specific job configuration with summary stats",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "jobs"
+                ],
+                "summary": "Get a job",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Job ID",
+                        "name": "jobId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v1.JobDetailResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/v1.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/v1.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/v1.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Full replace of a job configuration",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "jobs"
+                ],
+                "summary": "Update a job",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Job ID",
+                        "name": "jobId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Job configuration",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v1.JobRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v1.JobResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/v1.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/v1.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/v1.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Soft delete a job configuration",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "jobs"
+                ],
+                "summary": "Delete a job",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Job ID",
+                        "name": "jobId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v1.MessageResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/v1.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/v1.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/v1.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/jobs/{jobId}/runs": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "List all scrape runs for a specific job",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "runs"
+                ],
+                "summary": "List runs for a job",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Job ID",
+                        "name": "jobId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v1.RunListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/v1.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/v1.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/v1.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/jobs/{jobId}/runs/{runId}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Get detailed run results including rankings, diffs, and AI report",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "runs"
+                ],
+                "summary": "Get run details",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Job ID",
+                        "name": "jobId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Run ID",
+                        "name": "runId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v1.RunDetailResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/v1.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/v1.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/v1.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/jobs/{jobId}/scrape": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Manually trigger a scrape run for a job",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "jobs"
+                ],
+                "summary": "Trigger a scrape",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Job ID",
+                        "name": "jobId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/v1.ScrapeResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/v1.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/v1.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/v1.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/v1.ErrorResponse"
                         }
                     }
                 }
@@ -291,19 +704,19 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/http.HttpResponse"
+                            "$ref": "#/definitions/v1.UserResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.HttpResponse"
+                            "$ref": "#/definitions/v1.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/http.HttpResponse"
+                            "$ref": "#/definitions/v1.ErrorResponse"
                         }
                     }
                 }
@@ -340,19 +753,19 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/http.HttpResponse"
+                            "$ref": "#/definitions/v1.UserResponse"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/http.HttpResponse"
+                            "$ref": "#/definitions/v1.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/http.HttpResponse"
+                            "$ref": "#/definitions/v1.ErrorResponse"
                         }
                     }
                 }
@@ -360,21 +773,594 @@ const docTemplate = `{
         }
     },
     "definitions": {
-        "http.HttpResponse": {
+        "gorm.DeletedAt": {
+            "type": "object",
+            "properties": {
+                "time": {
+                    "type": "string"
+                },
+                "valid": {
+                    "description": "Valid is true if Time is not NULL",
+                    "type": "boolean"
+                }
+            }
+        },
+        "model.Job": {
+            "type": "object",
+            "properties": {
+                "competitors": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "created_by": {
+                    "type": "integer"
+                },
+                "deleted_at": {
+                    "$ref": "#/definitions/gorm.DeletedAt"
+                },
+                "domain": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "is_active": {
+                    "type": "boolean"
+                },
+                "keywords": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "name": {
+                    "type": "string"
+                },
+                "regions": {
+                    "type": "string"
+                },
+                "schedule_time": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "updated_by": {
+                    "type": "integer"
+                },
+                "user_id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "model.JobRegion": {
+            "type": "object",
+            "properties": {
+                "city": {
+                    "type": "string"
+                },
+                "country": {
+                    "type": "string"
+                },
+                "state": {
+                    "type": "string"
+                }
+            }
+        },
+        "model.JobRun": {
+            "type": "object",
+            "properties": {
+                "completed_at": {
+                    "type": "string"
+                },
+                "completed_pairs": {
+                    "type": "integer"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "created_by": {
+                    "type": "integer"
+                },
+                "deleted_at": {
+                    "$ref": "#/definitions/gorm.DeletedAt"
+                },
+                "failed_pairs": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "job_id": {
+                    "type": "integer"
+                },
+                "started_at": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "total_pairs": {
+                    "type": "integer"
+                },
+                "triggered_by": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "updated_by": {
+                    "type": "integer"
+                }
+            }
+        },
+        "model.RankDiff": {
+            "type": "object",
+            "properties": {
+                "change_type": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "created_by": {
+                    "type": "integer"
+                },
+                "curr_position": {
+                    "type": "integer"
+                },
+                "deleted_at": {
+                    "$ref": "#/definitions/gorm.DeletedAt"
+                },
+                "delta": {
+                    "type": "integer"
+                },
+                "domain": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "job_id": {
+                    "type": "integer"
+                },
+                "keyword": {
+                    "type": "string"
+                },
+                "prev_position": {
+                    "type": "integer"
+                },
+                "prev_run_id": {
+                    "type": "integer"
+                },
+                "run_id": {
+                    "type": "integer"
+                },
+                "state": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "updated_by": {
+                    "type": "integer"
+                }
+            }
+        },
+        "model.Report": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "created_by": {
+                    "type": "integer"
+                },
+                "deleted_at": {
+                    "$ref": "#/definitions/gorm.DeletedAt"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "job_id": {
+                    "type": "integer"
+                },
+                "prompt": {
+                    "type": "string"
+                },
+                "provider": {
+                    "type": "string"
+                },
+                "result": {
+                    "type": "object"
+                },
+                "run_id": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "updated_by": {
+                    "type": "integer"
+                }
+            }
+        },
+        "model.SearchPair": {
+            "type": "object",
+            "properties": {
+                "country": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "created_by": {
+                    "type": "integer"
+                },
+                "deleted_at": {
+                    "$ref": "#/definitions/gorm.DeletedAt"
+                },
+                "error_msg": {
+                    "type": "string"
+                },
+                "finished_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "job_id": {
+                    "type": "integer"
+                },
+                "keyword": {
+                    "type": "string"
+                },
+                "run_id": {
+                    "type": "integer"
+                },
+                "search_query": {
+                    "type": "string"
+                },
+                "started_at": {
+                    "type": "string"
+                },
+                "state": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "updated_by": {
+                    "type": "integer"
+                }
+            }
+        },
+        "model.SearchResult": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "created_by": {
+                    "type": "integer"
+                },
+                "deleted_at": {
+                    "$ref": "#/definitions/gorm.DeletedAt"
+                },
+                "domain": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "is_competitor": {
+                    "type": "boolean"
+                },
+                "is_target": {
+                    "type": "boolean"
+                },
+                "job_id": {
+                    "type": "integer"
+                },
+                "keyword": {
+                    "type": "string"
+                },
+                "pair_id": {
+                    "type": "integer"
+                },
+                "position": {
+                    "type": "integer"
+                },
+                "run_id": {
+                    "type": "integer"
+                },
+                "snippet": {
+                    "type": "string"
+                },
+                "state": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "updated_by": {
+                    "type": "integer"
+                },
+                "url": {
+                    "type": "string"
+                }
+            }
+        },
+        "model.User": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "created_by": {
+                    "type": "integer"
+                },
+                "deleted_at": {
+                    "$ref": "#/definitions/gorm.DeletedAt"
+                },
+                "email": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "is_active": {
+                    "type": "boolean"
+                },
+                "provider": {
+                    "type": "string"
+                },
+                "provider_id": {
+                    "type": "string"
+                },
+                "role": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "updated_by": {
+                    "type": "integer"
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
+        "oauth2.TokenPair": {
+            "type": "object",
+            "properties": {
+                "access_token": {
+                    "type": "string"
+                },
+                "refresh_token": {
+                    "type": "string"
+                }
+            }
+        },
+        "v1.AuthData": {
+            "type": "object",
+            "properties": {
+                "tokens": {
+                    "$ref": "#/definitions/oauth2.TokenPair"
+                },
+                "user": {
+                    "$ref": "#/definitions/model.User"
+                }
+            }
+        },
+        "v1.AuthResponse": {
             "type": "object",
             "properties": {
                 "code": {
-                    "type": "integer"
+                    "type": "integer",
+                    "example": 200
                 },
-                "data": {},
-                "error": {
-                    "type": "string"
+                "data": {
+                    "$ref": "#/definitions/v1.AuthData"
                 },
                 "message": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "Login successful"
                 },
                 "success": {
+                    "type": "boolean",
+                    "example": true
+                }
+            }
+        },
+        "v1.ErrorResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer",
+                    "example": 400
+                },
+                "error": {
+                    "type": "string",
+                    "example": "bad request"
+                },
+                "message": {
+                    "type": "string",
+                    "example": "Something went wrong"
+                },
+                "success": {
+                    "type": "boolean",
+                    "example": false
+                }
+            }
+        },
+        "v1.HealthData": {
+            "type": "object",
+            "properties": {
+                "status": {
+                    "type": "string",
+                    "example": "ok"
+                }
+            }
+        },
+        "v1.HealthResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer",
+                    "example": 200
+                },
+                "data": {
+                    "$ref": "#/definitions/v1.HealthData"
+                },
+                "message": {
+                    "type": "string",
+                    "example": "Service is healthy"
+                },
+                "success": {
+                    "type": "boolean",
+                    "example": true
+                }
+            }
+        },
+        "v1.JobDetailData": {
+            "type": "object",
+            "properties": {
+                "job": {
+                    "$ref": "#/definitions/model.Job"
+                },
+                "last_run": {
+                    "$ref": "#/definitions/model.JobRun"
+                },
+                "total_runs": {
+                    "type": "integer",
+                    "example": 5
+                }
+            }
+        },
+        "v1.JobDetailResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer",
+                    "example": 200
+                },
+                "data": {
+                    "$ref": "#/definitions/v1.JobDetailData"
+                },
+                "message": {
+                    "type": "string",
+                    "example": "Job retrieved successfully"
+                },
+                "success": {
+                    "type": "boolean",
+                    "example": true
+                }
+            }
+        },
+        "v1.JobListResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer",
+                    "example": 200
+                },
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/model.Job"
+                    }
+                },
+                "message": {
+                    "type": "string",
+                    "example": "Jobs retrieved successfully"
+                },
+                "success": {
+                    "type": "boolean",
+                    "example": true
+                }
+            }
+        },
+        "v1.JobRequest": {
+            "type": "object",
+            "required": [
+                "domain",
+                "keywords",
+                "name",
+                "regions"
+            ],
+            "properties": {
+                "competitors": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "domain": {
+                    "type": "string",
+                    "maxLength": 255,
+                    "minLength": 1
+                },
+                "is_active": {
                     "type": "boolean"
+                },
+                "keywords": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 255,
+                    "minLength": 1
+                },
+                "regions": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "$ref": "#/definitions/model.JobRegion"
+                    }
+                },
+                "schedule_time": {
+                    "type": "string",
+                    "maxLength": 10
+                }
+            }
+        },
+        "v1.JobResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer",
+                    "example": 200
+                },
+                "data": {
+                    "$ref": "#/definitions/model.Job"
+                },
+                "message": {
+                    "type": "string",
+                    "example": "Job created successfully"
+                },
+                "success": {
+                    "type": "boolean",
+                    "example": true
                 }
             }
         },
@@ -390,6 +1376,23 @@ const docTemplate = `{
                 },
                 "password": {
                     "type": "string"
+                }
+            }
+        },
+        "v1.MessageResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer",
+                    "example": 200
+                },
+                "message": {
+                    "type": "string",
+                    "example": "Operation successful"
+                },
+                "success": {
+                    "type": "boolean",
+                    "example": true
                 }
             }
         },
@@ -426,6 +1429,130 @@ const docTemplate = `{
                 }
             }
         },
+        "v1.RunDetailData": {
+            "type": "object",
+            "properties": {
+                "diffs": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/model.RankDiff"
+                    }
+                },
+                "pairs": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/model.SearchPair"
+                    }
+                },
+                "report": {
+                    "$ref": "#/definitions/model.Report"
+                },
+                "results": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/model.SearchResult"
+                    }
+                },
+                "run": {
+                    "$ref": "#/definitions/model.JobRun"
+                }
+            }
+        },
+        "v1.RunDetailResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer",
+                    "example": 200
+                },
+                "data": {
+                    "$ref": "#/definitions/v1.RunDetailData"
+                },
+                "message": {
+                    "type": "string",
+                    "example": "Run details retrieved successfully"
+                },
+                "success": {
+                    "type": "boolean",
+                    "example": true
+                }
+            }
+        },
+        "v1.RunListResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer",
+                    "example": 200
+                },
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/model.JobRun"
+                    }
+                },
+                "message": {
+                    "type": "string",
+                    "example": "Runs retrieved successfully"
+                },
+                "success": {
+                    "type": "boolean",
+                    "example": true
+                }
+            }
+        },
+        "v1.ScrapeData": {
+            "type": "object",
+            "properties": {
+                "run": {
+                    "$ref": "#/definitions/model.JobRun"
+                },
+                "total_pairs": {
+                    "type": "integer",
+                    "example": 4
+                }
+            }
+        },
+        "v1.ScrapeResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer",
+                    "example": 201
+                },
+                "data": {
+                    "$ref": "#/definitions/v1.ScrapeData"
+                },
+                "message": {
+                    "type": "string",
+                    "example": "Scrape triggered successfully"
+                },
+                "success": {
+                    "type": "boolean",
+                    "example": true
+                }
+            }
+        },
+        "v1.TokenResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer",
+                    "example": 200
+                },
+                "data": {
+                    "$ref": "#/definitions/oauth2.TokenPair"
+                },
+                "message": {
+                    "type": "string",
+                    "example": "Token refreshed successfully"
+                },
+                "success": {
+                    "type": "boolean",
+                    "example": true
+                }
+            }
+        },
         "v1.UpdateProfileRequest": {
             "type": "object",
             "properties": {
@@ -433,6 +1560,26 @@ const docTemplate = `{
                     "type": "string",
                     "maxLength": 50,
                     "minLength": 3
+                }
+            }
+        },
+        "v1.UserResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer",
+                    "example": 200
+                },
+                "data": {
+                    "$ref": "#/definitions/model.User"
+                },
+                "message": {
+                    "type": "string",
+                    "example": "Profile retrieved"
+                },
+                "success": {
+                    "type": "boolean",
+                    "example": true
                 }
             }
         }

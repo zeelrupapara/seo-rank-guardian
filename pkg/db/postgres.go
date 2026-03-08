@@ -2,6 +2,7 @@ package db
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/zeelrupapara/seo-rank-guardian/config"
 	"github.com/zeelrupapara/seo-rank-guardian/model"
@@ -40,6 +41,7 @@ func NewPostgresDB(cfg config.PostgresConfig, log *zap.SugaredLogger) (*Postgres
 
 	sqlDB.SetMaxOpenConns(25)
 	sqlDB.SetMaxIdleConns(5)
+	sqlDB.SetConnMaxLifetime(5 * time.Minute)
 
 	log.Info("Connected to PostgreSQL")
 
@@ -49,6 +51,13 @@ func NewPostgresDB(cfg config.PostgresConfig, log *zap.SugaredLogger) (*Postgres
 func (p *PostgresDB) Migrate() error {
 	err := p.DB.AutoMigrate(
 		&model.User{},
+		&model.Job{},
+		&model.JobRun{},
+		&model.SearchPair{},
+		&model.SearchResult{},
+		&model.RankDiff{},
+		&model.Report{},
+		&model.RunEventLog{},
 	)
 	if err != nil {
 		return fmt.Errorf("failed to migrate: %w", err)
