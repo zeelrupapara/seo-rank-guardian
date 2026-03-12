@@ -1,4 +1,4 @@
-.PHONY: run dev build test tidy swagger docker-up docker-down worker-py-setup worker-py
+.PHONY: run dev build test tidy swagger docker-up docker-down worker-setup worker
 
 run:
 	go run main.go start
@@ -24,8 +24,8 @@ docker-up:
 docker-down:
 	docker compose down
 
-worker-py-setup:
-	cd py-worker && python3.13 -m venv .venv && .venv/bin/pip install -r requirements.txt
+worker-setup:
+	cd worker && python3.13 -m venv .venv && .venv/bin/pip install -r requirements.txt
 
-worker-py:
-	cd py-worker && .venv/bin/python main.py
+worker:
+	cd worker && .venv/bin/python main.py

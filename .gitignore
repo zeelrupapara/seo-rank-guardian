@@ -63,5 +63,5 @@ compose.override.yml
 __pycache__/
 *.pyc
 *.pyo
-py-worker/.venv/
-py-worker/scraper_test.py
+worker/.venv/
+worker/scraper_test.py
