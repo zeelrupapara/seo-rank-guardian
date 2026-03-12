@@ -114,11 +114,28 @@ func (h *HttpServer) GetRun(c *fiber.Ctx) error {
 	var report model.Report
 	h.DB.Where("run_id = ?", runID).First(&report)
 
+	// Compute metrics
+	metrics := RunMetrics{
+		CompletedPairs: run.CompletedPairs,
+		FailedPairs:    run.FailedPairs,
+		TotalPairs:     run.TotalPairs,
+	}
+
+	// Compute avg response time from search pairs that have both started_at and finished_at
+	// Timestamps are int64 nanoseconds, convert to milliseconds
+	var avgMs *float64
+	h.DB.Model(&model.SearchPair{}).
+		Where("run_id = ? AND started_at IS NOT NULL AND finished_at IS NOT NULL AND started_at > 0 AND finished_at > 0", runID).
+		Select("AVG((finished_at - started_at)::float / 1000000)").
+		Scan(&avgMs)
+	metrics.AvgResponseTimeMs = avgMs
+
 	return httputil.SuccessResponse(c, fiber.StatusOK, fiber.Map{
 		"run":     run,
 		"pairs":   pairs,
 		"results": results,
 		"diffs":   diffs,
 		"report":  report,
+		"metrics": metrics,
 	}, "Run details retrieved successfully")
 }

@@ -126,10 +126,14 @@ definitions:
         type: integer
       deleted_at:
         $ref: '#/definitions/gorm.DeletedAt'
+      grounding_meta:
+        type: object
       id:
         type: integer
       job_id:
         type: integer
+      model:
+        type: string
       prompt:
         type: string
       provider:
@@ -145,6 +149,51 @@ definitions:
       updated_by:
         type: integer
     type: object
+  model.RunEventLog:
+    properties:
+      created_at:
+        type: string
+      data:
+        items:
+          type: integer
+        type: array
+      event_type:
+        $ref: '#/definitions/model.RunEventType'
+      id:
+        type: integer
+      job_id:
+        type: integer
+      run_id:
+        type: integer
+    type: object
+  model.RunEventType:
+    enum:
+    - run_started
+    - scrape_started
+    - scrape_complete
+    - scrape_failed
+    - run_progress
+    - detect_started
+    - detect_complete
+    - report_started
+    - report_complete
+    - report_failed
+    - run_complete
+    - run_failed
+    type: string
+    x-enum-varnames:
+    - EventRunStarted
+    - EventScrapeStarted
+    - EventScrapeComplete
+    - EventScrapeFailed
+    - EventRunProgress
+    - EventDetectStarted
+    - EventDetectComplete
+    - EventReportStarted
+    - EventReportComplete
+    - EventReportFailed
+    - EventRunComplete
+    - EventRunFailed
   model.SearchPair:
     properties:
       country:
@@ -221,6 +270,8 @@ definitions:
     type: object
   model.User:
     properties:
+      avatar_url:
+        type: string
       created_at:
         type: string
       created_by:
@@ -274,6 +325,36 @@ definitions:
         example: true
         type: boolean
     type: object
+  v1.DashboardStatsData:
+    properties:
+      avg_rank:
+        type: number
+      keywords_at_risk:
+        type: integer
+      total_results:
+        type: integer
+    type: object
+  v1.DashboardStatsResponse:
+    properties:
+      code:
+        example: 200
+        type: integer
+      data:
+        $ref: '#/definitions/v1.DashboardStatsData'
+      message:
+        example: Dashboard stats retrieved successfully
+        type: string
+      success:
+        example: true
+        type: boolean
+    type: object
+  v1.DomainPosition:
+    properties:
+      domain:
+        type: string
+      position:
+        type: integer
+    type: object
   v1.ErrorResponse:
     properties:
       code:
@@ -287,6 +368,22 @@ definitions:
         type: string
       success:
         example: false
+        type: boolean
+    type: object
+  v1.EventsResponse:
+    properties:
+      code:
+        example: 200
+        type: integer
+      data:
+        items:
+          $ref: '#/definitions/model.RunEventLog'
+        type: array
+      message:
+        example: Events retrieved successfully
+        type: string
+      success:
+        example: true
         type: boolean
     type: object
   v1.HealthData:
@@ -398,6 +495,39 @@ definitions:
         example: true
         type: boolean
     type: object
+  v1.JobStatsData:
+    properties:
+      competitors:
+        items:
+          type: string
+        type: array
+      health_score:
+        type: integer
+      run_id:
+        type: integer
+      top_3_change:
+        type: integer
+      top_3_rankings:
+        type: integer
+      total_keywords:
+        type: integer
+      visibility_index:
+        type: number
+    type: object
+  v1.JobStatsResponse:
+    properties:
+      code:
+        example: 200
+        type: integer
+      data:
+        $ref: '#/definitions/v1.JobStatsData'
+      message:
+        example: Job stats retrieved successfully
+        type: string
+      success:
+        example: true
+        type: boolean
+    type: object
   v1.LoginRequest:
     properties:
       email:
@@ -415,6 +545,43 @@ definitions:
         type: integer
       message:
         example: Operation successful
+        type: string
+      success:
+        example: true
+        type: boolean
+    type: object
+  v1.RankingEntry:
+    properties:
+      change:
+        type: string
+      competitors:
+        items:
+          $ref: '#/definitions/v1.DomainPosition'
+        type: array
+      keyword:
+        type: string
+      prev_position:
+        type: integer
+      state:
+        type: string
+      target_position:
+        type: integer
+      top_domains:
+        items:
+          $ref: '#/definitions/v1.DomainPosition'
+        type: array
+    type: object
+  v1.RankingsResponse:
+    properties:
+      code:
+        example: 200
+        type: integer
+      data:
+        items:
+          $ref: '#/definitions/v1.RankingEntry'
+        type: array
+      message:
+        example: Rankings retrieved successfully
         type: string
       success:
         example: true
@@ -442,6 +609,20 @@ definitions:
     - email
     - password
     - username
+    type: object
+  v1.ReportResponse:
+    properties:
+      code:
+        example: 200
+        type: integer
+      data:
+        $ref: '#/definitions/model.Report'
+      message:
+        example: Report retrieved successfully
+        type: string
+      success:
+        example: true
+        type: boolean
     type: object
   v1.RunDetailData:
     properties:
@@ -523,6 +704,31 @@ definitions:
         $ref: '#/definitions/oauth2.TokenPair'
       message:
         example: Token refreshed successfully
+        type: string
+      success:
+        example: true
+        type: boolean
+    type: object
+  v1.TrendPoint:
+    properties:
+      position:
+        type: integer
+      run_date:
+        type: string
+      run_id:
+        type: integer
+    type: object
+  v1.TrendsResponse:
+    properties:
+      code:
+        example: 200
+        type: integer
+      data:
+        items:
+          $ref: '#/definitions/v1.TrendPoint'
+        type: array
+      message:
+        example: Trends retrieved successfully
         type: string
       success:
         example: true
@@ -710,6 +916,25 @@ paths:
       summary: Register a new user
       tags:
       - auth
+  /dashboard/stats:
+    get:
+      description: Get aggregated dashboard statistics for the authenticated user
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.DashboardStatsResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get dashboard stats
+      tags:
+      - dashboard
   /health:
     get:
       description: Check if the service is running
@@ -878,6 +1103,81 @@ paths:
       summary: Update a job
       tags:
       - jobs
+  /jobs/{jobId}/rankings:
+    get:
+      description: Get rankings from the most recent completed run
+      parameters:
+      - description: Job ID
+        in: path
+        name: jobId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.RankingsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get latest rankings for a job
+      tags:
+      - jobs
+  /jobs/{jobId}/reports:
+    get:
+      description: Get a paginated list of AI reports for a specific job
+      parameters:
+      - description: Job ID
+        in: path
+        name: jobId
+        required: true
+        type: integer
+      - description: Page number (default 1)
+        in: query
+        name: page
+        type: integer
+      - description: Items per page (default 20)
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List reports for a job
+      tags:
+      - reports
   /jobs/{jobId}/runs:
     get:
       description: List all scrape runs for a specific job
@@ -949,6 +1249,120 @@ paths:
       summary: Get run details
       tags:
       - runs
+  /jobs/{jobId}/runs/{runId}/events:
+    get:
+      description: Get all persisted events for a run
+      parameters:
+      - description: Job ID
+        in: path
+        name: jobId
+        required: true
+        type: integer
+      - description: Run ID
+        in: path
+        name: runId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.EventsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List run events
+      tags:
+      - runs
+  /jobs/{jobId}/runs/{runId}/rankings:
+    get:
+      description: Get search results grouped by keyword x state for a specific run
+      parameters:
+      - description: Job ID
+        in: path
+        name: jobId
+        required: true
+        type: integer
+      - description: Run ID
+        in: path
+        name: runId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.RankingsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get rankings for a specific run
+      tags:
+      - runs
+  /jobs/{jobId}/runs/{runId}/report:
+    get:
+      description: Get the AI-generated report for a specific run
+      parameters:
+      - description: Job ID
+        in: path
+        name: jobId
+        required: true
+        type: integer
+      - description: Run ID
+        in: path
+        name: runId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.ReportResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get AI report for a run
+      tags:
+      - runs
   /jobs/{jobId}/scrape:
     post:
       description: Manually trigger a scrape run for a job
@@ -984,6 +1398,91 @@ paths:
       security:
       - BearerAuth: []
       summary: Trigger a scrape
+      tags:
+      - jobs
+  /jobs/{jobId}/stats:
+    get:
+      description: Get computed stats for a job (health score, top 3 rankings, visibility
+        index)
+      parameters:
+      - description: Job ID
+        in: path
+        name: jobId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.JobStatsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get job stats
+      tags:
+      - jobs
+  /jobs/{jobId}/trends:
+    get:
+      description: Track a domain's position across recent runs for a keyword x state
+      parameters:
+      - description: Job ID
+        in: path
+        name: jobId
+        required: true
+        type: integer
+      - description: Keyword to track
+        in: query
+        name: keyword
+        required: true
+        type: string
+      - description: State/region to track
+        in: query
+        name: state
+        required: true
+        type: string
+      - description: Domain to track (defaults to job's target domain)
+        in: query
+        name: domain
+        type: string
+      - description: Number of recent runs to include (default 10)
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.TrendsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get position trends over time
       tags:
       - jobs
   /users/me:
@@ -1038,6 +1537,59 @@ paths:
       security:
       - BearerAuth: []
       summary: Update current user profile
+      tags:
+      - users
+  /users/me/avatar:
+    delete:
+      description: Remove the current user's profile avatar
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.UserResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Remove avatar
+      tags:
+      - users
+    post:
+      consumes:
+      - multipart/form-data
+      description: Upload a profile avatar image (max 800KB, JPG/PNG only)
+      parameters:
+      - description: Avatar image file
+        in: formData
+        name: avatar
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.UserResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Upload avatar
       tags:
       - users
 securityDefinitions:

@@ -1,8 +1,6 @@
 package model
 
 import (
-	"time"
-
 	"gorm.io/datatypes"
 )
 
@@ -26,10 +24,11 @@ const (
 )
 
 type RunEvent struct {
-	Type    RunEventType `json:"type"`
-	RunID   uint         `json:"run_id"`
-	JobID   uint         `json:"job_id"`
-	Payload interface{}  `json:"payload"`
+	Type      RunEventType `json:"type"`
+	RunID     uint         `json:"run_id"`
+	JobID     uint         `json:"job_id"`
+	Timestamp int64        `json:"timestamp"`
+	Payload   interface{}  `json:"payload"`
 }
 
 // --- Typed payloads ---
@@ -74,7 +73,7 @@ type RunStatusEventPayload struct {
 
 type RunEventLog struct {
 	ID        uint           `json:"id" gorm:"primaryKey"`
-	CreatedAt time.Time      `json:"created_at"`
+	CreatedAt int64          `json:"created_at" gorm:"autoCreateTime:nano"`
 	RunID     uint           `json:"run_id" gorm:"index;not null"`
 	JobID     uint           `json:"job_id" gorm:"index;not null"`
 	EventType RunEventType   `json:"event_type" gorm:"size:50;not null;index"`

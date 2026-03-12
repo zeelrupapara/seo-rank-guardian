@@ -14,13 +14,13 @@ import (
 )
 
 type JobRequest struct {
-	Name         string             `json:"name" validate:"required,min=1,max=255"`
-	Domain       string             `json:"domain" validate:"required,min=1,max=255"`
-	IsActive     *bool              `json:"is_active"`
-	ScheduleTime string             `json:"schedule_time" validate:"omitempty,max=10"`
-	Competitors  []string           `json:"competitors"`
-	Keywords     []string           `json:"keywords" validate:"required,min=1"`
-	Regions      []model.JobRegion  `json:"regions" validate:"required,min=1"`
+	Name         string            `json:"name" validate:"required,min=1,max=255"`
+	Domain       string            `json:"domain" validate:"required,min=1,max=255"`
+	IsActive     *bool             `json:"is_active"`
+	ScheduleTime string            `json:"schedule_time" validate:"omitempty,max=10"`
+	Competitors  []string          `json:"competitors"`
+	Keywords     []string          `json:"keywords" validate:"required,min=1"`
+	Regions      []model.JobRegion `json:"regions" validate:"required,min=1"`
 }
 
 // CreateJob godoc
@@ -50,6 +50,33 @@ func (h *HttpServer) CreateJob(c *fiber.Ctx) error {
 		return httputil.ErrorResponse(c, fiber.StatusBadRequest, apperrors.ErrBadRequest.Error(), "Validation failed")
 	}
 
+	// Normalize and validate domain
+	req.Domain = model.NormalizeDomain(req.Domain)
+	if err := model.ValidateDomain(req.Domain); err != nil {
+		return httputil.ErrorResponse(c, fiber.StatusBadRequest, apperrors.ErrBadRequest.Error(), fmt.Sprintf("Invalid domain: %s", err.Error()))
+	}
+
+	// Normalize, validate, and deduplicate competitors
+	seen := make(map[string]bool)
+	var competitors []string
+	for _, comp := range req.Competitors {
+		comp = model.NormalizeDomain(comp)
+		if err := model.ValidateDomain(comp); err != nil {
+			return httputil.ErrorResponse(c, fiber.StatusBadRequest, apperrors.ErrBadRequest.Error(), fmt.Sprintf("Invalid competitor domain %q: %s", comp, err.Error()))
+		}
+		if comp == req.Domain {
+			return httputil.ErrorResponse(c, fiber.StatusBadRequest, apperrors.ErrBadRequest.Error(), "Competitor domain cannot be the same as the target domain")
+		}
+		if !seen[comp] {
+			seen[comp] = true
+			competitors = append(competitors, comp)
+		}
+	}
+	req.Competitors = competitors
+
+	// Deduplicate keywords
+	keywords := deduplicateKeywords(req.Keywords)
+
 	job := model.Job{
 		UserID:       userID,
 		Name:         req.Name,
@@ -65,11 +92,13 @@ func (h *HttpServer) CreateJob(c *fiber.Ctx) error {
 	if err := job.SetCompetitors(req.Competitors); err != nil {
 		return httputil.ErrorResponse(c, fiber.StatusInternalServerError, apperrors.ErrInternalServer.Error(), "Failed to set competitors")
 	}
-	if err := job.SetKeywords(req.Keywords); err != nil {
-		return httputil.ErrorResponse(c, fiber.StatusInternalServerError, apperrors.ErrInternalServer.Error(), "Failed to set keywords")
-	}
 	if err := job.SetRegions(req.Regions); err != nil {
 		return httputil.ErrorResponse(c, fiber.StatusInternalServerError, apperrors.ErrInternalServer.Error(), "Failed to set regions")
+	}
+
+	// Build keyword associations
+	for _, kw := range keywords {
+		job.Keywords = append(job.Keywords, model.JobKeyword{Keyword: kw})
 	}
 
 	job.CreatedBy = userID
@@ -100,17 +129,101 @@ func (h *HttpServer) ListJobs(c *fiber.Ctx) error {
 	page, pageSize := parsePagination(c)
 	offset := (page - 1) * pageSize
 
+	query := h.DB.Model(&model.Job{}).Where("user_id = ?", userID)
+
+	// Search filter (ILIKE on name or domain)
+	if search := c.Query("search"); search != "" {
+		like := "%" + search + "%"
+		query = query.Where("(name ILIKE ? OR domain ILIKE ?)", like, like)
+	}
+
+	// Status filter
+	if status := c.Query("status"); status == "active" {
+		query = query.Where("is_active = ?", true)
+	} else if status == "inactive" {
+		query = query.Where("is_active = ?", false)
+	}
+
 	var total int64
-	h.DB.Model(&model.Job{}).Where("user_id = ?", userID).Count(&total)
+	query.Count(&total)
 
 	var jobs []model.Job
-	if err := h.DB.Where("user_id = ?", userID).Order("created_at DESC").
+	if err := query.Preload("Keywords").Order("created_at DESC").
 		Offset(offset).Limit(pageSize).Find(&jobs).Error; err != nil {
 		return httputil.ErrorResponse(c, fiber.StatusInternalServerError, apperrors.ErrInternalServer.Error(), "Failed to list jobs")
 	}
 
+	if len(jobs) == 0 {
+		return httputil.SuccessResponse(c, fiber.StatusOK, fiber.Map{
+			"items": []JobListItem{},
+			"total": total,
+			"page":  page,
+			"limit": pageSize,
+		}, "Jobs retrieved successfully")
+	}
+
+	// Collect job IDs
+	jobIDs := make([]uint, len(jobs))
+	for i, j := range jobs {
+		jobIDs[i] = j.ID
+	}
+
+	// Batch-load last run per job
+	type lastRunRow struct {
+		JobID       uint
+		RunID       uint
+		Status      string
+		CompletedAt *int64
+		CreatedAt   int64
+	}
+	var lastRuns []lastRunRow
+	h.DB.Raw(`SELECT DISTINCT ON (job_id) job_id, id AS run_id, status, completed_at, created_at
+		FROM srg_job_runs WHERE job_id IN ? ORDER BY job_id, created_at DESC`, jobIDs).Scan(&lastRuns)
+
+	lastRunMap := make(map[uint]*JobRunBrief)
+	for _, lr := range lastRuns {
+		lastRunMap[lr.JobID] = &JobRunBrief{
+			ID:          lr.RunID,
+			Status:      lr.Status,
+			CompletedAt: lr.CompletedAt,
+			CreatedAt:   lr.CreatedAt,
+		}
+	}
+
+	// Batch-load latest health score per job from reports
+	type healthRow struct {
+		JobID       uint
+		HealthScore *int
+	}
+	var healthRows []healthRow
+	h.DB.Raw(`SELECT DISTINCT ON (job_id) job_id, (result->>'health_score')::int AS health_score
+		FROM srg_reports WHERE job_id IN ? AND status = 'generated' ORDER BY job_id, created_at DESC`, jobIDs).Scan(&healthRows)
+
+	healthMap := make(map[uint]*int)
+	for _, hr := range healthRows {
+		healthMap[hr.JobID] = hr.HealthScore
+	}
+
+	// Build enriched items
+	items := make([]JobListItem, len(jobs))
+	for i, j := range jobs {
+		compFavicons := make([]DomainInfo, 0)
+		for _, comp := range j.GetCompetitors() {
+			compFavicons = append(compFavicons, DomainInfo{Domain: comp, FaviconURL: model.FaviconURL(comp)})
+		}
+		items[i] = JobListItem{
+			Job:                j,
+			KeywordCount:       len(j.Keywords),
+			RegionCount:        len(j.GetRegions()),
+			LastRun:            lastRunMap[j.ID],
+			HealthScore:        healthMap[j.ID],
+			FaviconURL:         model.FaviconURL(j.Domain),
+			CompetitorFavicons: compFavicons,
+		}
+	}
+
 	return httputil.SuccessResponse(c, fiber.StatusOK, fiber.Map{
-		"items": jobs,
+		"items": items,
 		"total": total,
 		"page":  page,
 		"limit": pageSize,
@@ -141,7 +254,7 @@ func (h *HttpServer) GetJob(c *fiber.Ctx) error {
 	}
 
 	var job model.Job
-	if err := h.DB.Where("id = ? AND user_id = ?", jobID, userID).First(&job).Error; err != nil {
+	if err := h.DB.Preload("Keywords").Where("id = ? AND user_id = ?", jobID, userID).First(&job).Error; err != nil {
 		return httputil.ErrorResponse(c, fiber.StatusNotFound, apperrors.ErrJobNotFound.Error(), "Job not found")
 	}
 
@@ -152,10 +265,17 @@ func (h *HttpServer) GetJob(c *fiber.Ctx) error {
 	var lastRun model.JobRun
 	h.DB.Where("job_id = ?", jobID).Order("created_at DESC").First(&lastRun)
 
+	compFavicons := make([]DomainInfo, 0)
+	for _, comp := range job.GetCompetitors() {
+		compFavicons = append(compFavicons, DomainInfo{Domain: comp, FaviconURL: model.FaviconURL(comp)})
+	}
+
 	return httputil.SuccessResponse(c, fiber.StatusOK, fiber.Map{
-		"job":        job,
-		"total_runs": totalRuns,
-		"last_run":   lastRun,
+		"job":                 job,
+		"total_runs":          totalRuns,
+		"last_run":            lastRun,
+		"favicon_url":         model.FaviconURL(job.Domain),
+		"competitor_favicons": compFavicons,
 	}, "Job retrieved successfully")
 }
 
@@ -185,7 +305,7 @@ func (h *HttpServer) UpdateJob(c *fiber.Ctx) error {
 	}
 
 	var job model.Job
-	if err := h.DB.Where("id = ? AND user_id = ?", jobID, userID).First(&job).Error; err != nil {
+	if err := h.DB.Preload("Keywords").Where("id = ? AND user_id = ?", jobID, userID).First(&job).Error; err != nil {
 		return httputil.ErrorResponse(c, fiber.StatusNotFound, apperrors.ErrJobNotFound.Error(), "Job not found")
 	}
 
@@ -198,6 +318,30 @@ func (h *HttpServer) UpdateJob(c *fiber.Ctx) error {
 		return httputil.ErrorResponse(c, fiber.StatusBadRequest, apperrors.ErrBadRequest.Error(), "Validation failed")
 	}
 
+	// Normalize and validate domain
+	req.Domain = model.NormalizeDomain(req.Domain)
+	if err := model.ValidateDomain(req.Domain); err != nil {
+		return httputil.ErrorResponse(c, fiber.StatusBadRequest, apperrors.ErrBadRequest.Error(), fmt.Sprintf("Invalid domain: %s", err.Error()))
+	}
+
+	// Normalize, validate, and deduplicate competitors
+	seen := make(map[string]bool)
+	var competitors []string
+	for _, comp := range req.Competitors {
+		comp = model.NormalizeDomain(comp)
+		if err := model.ValidateDomain(comp); err != nil {
+			return httputil.ErrorResponse(c, fiber.StatusBadRequest, apperrors.ErrBadRequest.Error(), fmt.Sprintf("Invalid competitor domain %q: %s", comp, err.Error()))
+		}
+		if comp == req.Domain {
+			return httputil.ErrorResponse(c, fiber.StatusBadRequest, apperrors.ErrBadRequest.Error(), "Competitor domain cannot be the same as the target domain")
+		}
+		if !seen[comp] {
+			seen[comp] = true
+			competitors = append(competitors, comp)
+		}
+	}
+	req.Competitors = competitors
+
 	job.Name = req.Name
 	job.Domain = req.Domain
 	job.ScheduleTime = req.ScheduleTime
@@ -208,18 +352,62 @@ func (h *HttpServer) UpdateJob(c *fiber.Ctx) error {
 	if err := job.SetCompetitors(req.Competitors); err != nil {
 		return httputil.ErrorResponse(c, fiber.StatusInternalServerError, apperrors.ErrInternalServer.Error(), "Failed to set competitors")
 	}
-	if err := job.SetKeywords(req.Keywords); err != nil {
-		return httputil.ErrorResponse(c, fiber.StatusInternalServerError, apperrors.ErrInternalServer.Error(), "Failed to set keywords")
-	}
 	if err := job.SetRegions(req.Regions); err != nil {
 		return httputil.ErrorResponse(c, fiber.StatusInternalServerError, apperrors.ErrInternalServer.Error(), "Failed to set regions")
 	}
 
+	// Keyword lifecycle management
+	newKeywords := deduplicateKeywords(req.Keywords)
+
+	// Build maps of existing and new keywords
+	existingMap := make(map[string]model.JobKeyword)
+	for _, kw := range job.Keywords {
+		existingMap[kw.Keyword] = kw
+	}
+	newMap := make(map[string]bool)
+	for _, kw := range newKeywords {
+		newMap[kw] = true
+	}
+
+	// Use a transaction for keyword lifecycle
+	err = h.DB.Transaction(func(tx *gorm.DB) error {
+		// Delete removed keywords and cascade their data
+		for keyword, jk := range existingMap {
+			if !newMap[keyword] {
+				// Cascade delete related data
+				tx.Where("job_id = ? AND keyword = ?", jobID, keyword).Delete(&model.RankDiff{})
+				tx.Where("job_id = ? AND keyword = ?", jobID, keyword).Delete(&model.SearchResult{})
+				tx.Where("job_id = ? AND keyword = ?", jobID, keyword).Delete(&model.SearchPair{})
+				tx.Delete(&model.JobKeyword{}, jk.ID)
+			}
+		}
+
+		// Add new keywords
+		for _, keyword := range newKeywords {
+			if _, exists := existingMap[keyword]; !exists {
+				jk := model.JobKeyword{JobID: uint(jobID), Keyword: keyword}
+				if err := tx.Create(&jk).Error; err != nil {
+					return err
+				}
+			}
+		}
+
+		return nil
+	})
+	if err != nil {
+		return httputil.ErrorResponse(c, fiber.StatusInternalServerError, apperrors.ErrInternalServer.Error(), "Failed to update keywords")
+	}
+
 	job.UpdatedBy = userID
 
-	if err := h.DB.Save(&job).Error; err != nil {
+	// Clear Keywords before Save to prevent GORM from re-saving the old association
+	job.Keywords = nil
+	if err := h.DB.Omit("Keywords").Save(&job).Error; err != nil {
 		return httputil.ErrorResponse(c, fiber.StatusInternalServerError, apperrors.ErrInternalServer.Error(), "Failed to update job")
 	}
+
+	// Reload keywords for response
+	h.DB.Where("job_id = ?", jobID).Find(&job.Keywords)
 
 	return httputil.SuccessResponse(c, fiber.StatusOK, job, "Job updated successfully")
 }
@@ -283,7 +471,7 @@ func (h *HttpServer) TriggerScrape(c *fiber.Ctx) error {
 	}
 
 	var job model.Job
-	if err := h.DB.Where("id = ? AND user_id = ?", jobID, userID).First(&job).Error; err != nil {
+	if err := h.DB.Preload("Keywords").Where("id = ? AND user_id = ?", jobID, userID).First(&job).Error; err != nil {
 		return httputil.ErrorResponse(c, fiber.StatusNotFound, apperrors.ErrJobNotFound.Error(), "Job not found")
 	}
 
@@ -291,11 +479,10 @@ func (h *HttpServer) TriggerScrape(c *fiber.Ctx) error {
 		return httputil.ErrorResponse(c, fiber.StatusBadRequest, apperrors.ErrJobNotActive.Error(), "Job is not active")
 	}
 
-	keywords := job.GetKeywords()
 	regions := job.GetRegions()
-	totalPairs := len(keywords) * len(regions)
+	totalPairs := len(job.Keywords) * len(regions)
 
-	now := time.Now()
+	now := time.Now().UnixNano()
 	run := model.JobRun{
 		JobID:       job.ID,
 		Status:      "running",
@@ -322,14 +509,16 @@ func (h *HttpServer) TriggerScrape(c *fiber.Ctx) error {
 		if err.Error() == "run_in_progress" {
 			return httputil.ErrorResponse(c, fiber.StatusConflict, apperrors.ErrRunInProgress.Error(), "A run is already in progress")
 		}
+		h.Log.Errorf("Failed to create run for job %d: %v", job.ID, err)
 		return httputil.ErrorResponse(c, fiber.StatusInternalServerError, apperrors.ErrInternalServer.Error(), "Failed to create run")
 	}
 
 	// Emit run_started event
 	runStartedEvt := model.RunEvent{
-		Type:  model.EventRunStarted,
-		RunID: run.ID,
-		JobID: job.ID,
+		Type:      model.EventRunStarted,
+		RunID:     run.ID,
+		JobID:     job.ID,
+		Timestamp: time.Now().UnixNano(),
 		Payload: model.RunStatusEventPayload{
 			Message:    "Run started",
 			TotalPairs: totalPairs,
@@ -354,14 +543,15 @@ func (h *HttpServer) TriggerScrape(c *fiber.Ctx) error {
 
 	// Create search pairs and publish to NATS — track actual created count
 	createdPairs := 0
-	for _, keyword := range keywords {
+	for _, kw := range job.Keywords {
 		for _, region := range regions {
-			searchQuery := fmt.Sprintf("%s in %s", keyword, region.State)
+			searchQuery := fmt.Sprintf("%s in %s", kw.Keyword, region.State)
 
 			pair := model.SearchPair{
 				RunID:       run.ID,
 				JobID:       job.ID,
-				Keyword:     keyword,
+				KeywordID:   kw.ID,
+				Keyword:     kw.Keyword,
 				State:       region.State,
 				Country:     region.Country,
 				SearchQuery: searchQuery,
@@ -380,7 +570,7 @@ func (h *HttpServer) TriggerScrape(c *fiber.Ctx) error {
 				"run_id":       run.ID,
 				"job_id":       job.ID,
 				"search_query": searchQuery,
-				"keyword":      keyword,
+				"keyword":      kw.Keyword,
 				"state":        region.State,
 				"country":      region.Country,
 				"domain":       job.Domain,
@@ -409,4 +599,102 @@ func (h *HttpServer) TriggerScrape(c *fiber.Ctx) error {
 		"run":         run,
 		"total_pairs": totalPairs,
 	}, "Scrape triggered successfully")
+}
+
+// JobStats godoc
+// @Summary Get job stats
+// @Description Get computed stats for a job (health score, top 3 rankings, visibility index)
+// @Tags jobs
+// @Produce json
+// @Security BearerAuth
+// @Param jobId path int true "Job ID"
+// @Success 200 {object} JobStatsResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Router /jobs/{jobId}/stats [get]
+func (h *HttpServer) JobStats(c *fiber.Ctx) error {
+	userID, ok := c.Locals("userId").(uint)
+	if !ok {
+		return httputil.ErrorResponse(c, fiber.StatusUnauthorized, apperrors.ErrUnauthorized.Error(), "Unauthorized")
+	}
+
+	jobID, err := strconv.ParseUint(c.Params("jobId"), 10, 64)
+	if err != nil {
+		return httputil.ErrorResponse(c, fiber.StatusBadRequest, apperrors.ErrBadRequest.Error(), "Invalid job ID")
+	}
+
+	var job model.Job
+	if err := h.DB.Preload("Keywords").Where("id = ? AND user_id = ?", jobID, userID).First(&job).Error; err != nil {
+		return httputil.ErrorResponse(c, fiber.StatusNotFound, apperrors.ErrJobNotFound.Error(), "Job not found")
+	}
+
+	compDomains := job.GetCompetitors()
+	compInfos := make([]DomainInfo, len(compDomains))
+	for i, comp := range compDomains {
+		compInfos[i] = DomainInfo{Domain: comp, FaviconURL: model.FaviconURL(comp)}
+	}
+	stats := JobStatsData{
+		Competitors: compInfos,
+	}
+
+	regions := job.GetRegions()
+	stats.TotalKeywords = len(job.Keywords) * len(regions)
+
+	// Find latest completed run
+	var latestRun model.JobRun
+	if err := h.DB.Where("job_id = ? AND status IN ?", jobID, []string{"completed", "partial"}).
+		Order("created_at DESC").First(&latestRun).Error; err != nil {
+		// No completed runs yet
+		return httputil.SuccessResponse(c, fiber.StatusOK, stats, "Job stats retrieved successfully")
+	}
+	stats.RunID = &latestRun.ID
+
+	// Health score from latest report
+	var healthScore *int
+	h.DB.Raw(`SELECT (result->>'health_score')::int FROM srg_reports WHERE job_id = ? AND run_id = ? AND status = 'generated' ORDER BY created_at DESC LIMIT 1`,
+		jobID, latestRun.ID).Scan(&healthScore)
+	stats.HealthScore = healthScore
+
+	// Top 3 rankings: count distinct keyword|state where is_target=true AND position<=3
+	var top3Current int64
+	h.DB.Model(&model.SearchResult{}).
+		Where("run_id = ? AND is_target = ? AND position <= 3", latestRun.ID, true).
+		Count(&top3Current)
+	stats.Top3Rankings = top3Current
+
+	// Top 3 change vs previous run
+	var prevRun model.JobRun
+	if err := h.DB.Where("job_id = ? AND status IN ? AND id < ?", jobID, []string{"completed", "partial"}, latestRun.ID).
+		Order("created_at DESC").First(&prevRun).Error; err == nil {
+		var top3Prev int64
+		h.DB.Model(&model.SearchResult{}).
+			Where("run_id = ? AND is_target = ? AND position <= 3", prevRun.ID, true).
+			Count(&top3Prev)
+		stats.Top3Change = top3Current - top3Prev
+	}
+
+	// Visibility index: (keywords in top 10 / total keyword pairs) * 100
+	if stats.TotalKeywords > 0 {
+		var inTop10 int64
+		h.DB.Model(&model.SearchResult{}).
+			Where("run_id = ? AND is_target = ? AND position <= 10", latestRun.ID, true).
+			Count(&inTop10)
+		stats.VisibilityIndex = float64(inTop10) / float64(stats.TotalKeywords) * 100
+	}
+
+	return httputil.SuccessResponse(c, fiber.StatusOK, stats, "Job stats retrieved successfully")
+}
+
+// deduplicateKeywords returns a deduplicated list of keywords preserving order.
+func deduplicateKeywords(keywords []string) []string {
+	seen := make(map[string]bool)
+	var result []string
+	for _, kw := range keywords {
+		if kw != "" && !seen[kw] {
+			seen[kw] = true
+			result = append(result, kw)
+		}
+	}
+	return result
 }

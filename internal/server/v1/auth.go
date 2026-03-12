@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -51,7 +52,10 @@ func (h *HttpServer) Register(c *fiber.Ctx) error {
 
 	var existing model.User
 	if err := h.DB.Where("email = ?", req.Email).First(&existing).Error; err == nil {
-		return httputil.ErrorResponse(c, fiber.StatusConflict, apperrors.ErrBadRequest.Error(), "Unable to create account with provided details")
+		return httputil.ErrorResponse(c, fiber.StatusConflict, apperrors.ErrBadRequest.Error(), "An account with this email already exists")
+	}
+	if err := h.DB.Where("username = ?", req.Username).First(&existing).Error; err == nil {
+		return httputil.ErrorResponse(c, fiber.StatusConflict, apperrors.ErrBadRequest.Error(), "This username is already taken")
 	}
 
 	hashedPassword, err := utils.HashPassword(req.Password)
@@ -60,11 +64,12 @@ func (h *HttpServer) Register(c *fiber.Ctx) error {
 	}
 
 	user := model.User{
-		Username: req.Username,
-		Email:    req.Email,
-		Password: hashedPassword,
-		Role:     "user",
-		IsActive: true,
+		Username:  req.Username,
+		Email:     req.Email,
+		Password:  hashedPassword,
+		Role:      "user",
+		IsActive:  true,
+		AvatarURL: model.DefaultAvatarURL(req.Username),
 	}
 
 	if err := h.DB.Create(&user).Error; err != nil {
@@ -238,20 +243,41 @@ func (h *HttpServer) GoogleCallback(c *fiber.Ctx) error {
 
 	// 1. Look up by provider + provider_id
 	result := h.DB.Where("provider = ? AND provider_id = ?", "google", info.Sub).First(&user)
+	if result.Error == nil {
+		// Existing Google user — sync avatar from Google if they don't have a custom upload
+		if info.Picture != "" && !strings.HasPrefix(user.AvatarURL, "/uploads/") {
+			user.AvatarURL = info.Picture
+			h.DB.Model(&user).Update("avatar_url", user.AvatarURL)
+		}
+	}
 	if result.Error != nil {
 		// 2. Look up by email — only link if account was created via Google (prevent takeover of local accounts)
 		result = h.DB.Where("email = ?", info.Email).First(&user)
 		if result.Error != nil {
 			// 3. Create new user
+			avatarURL := info.Picture
+			if avatarURL == "" {
+				avatarURL = model.DefaultAvatarURL(info.Name)
+			}
+			// Ensure unique username — if taken, append random suffix
+			username := info.Name
+			var usernameCheck model.User
+			if h.DB.Where("username = ?", username).First(&usernameCheck).Error == nil {
+				suffix := make([]byte, 3)
+				rand.Read(suffix)
+				username = username + "_" + hex.EncodeToString(suffix)
+			}
 			user = model.User{
-				Username:   info.Name,
+				Username:   username,
 				Email:      info.Email,
 				Role:       "user",
 				IsActive:   true,
 				Provider:   "google",
 				ProviderID: info.Sub,
+				AvatarURL:  avatarURL,
 			}
 			if err := h.DB.Create(&user).Error; err != nil {
+				h.Log.Errorf("Failed to create Google user: %v", err)
 				return httputil.ErrorResponse(c, fiber.StatusInternalServerError, apperrors.ErrInternalServer.Error(), "Failed to create user")
 			}
 		} else if user.Provider == "google" {
@@ -275,10 +301,9 @@ func (h *HttpServer) GoogleCallback(c *fiber.Ctx) error {
 		return httputil.ErrorResponse(c, fiber.StatusInternalServerError, apperrors.ErrInternalServer.Error(), "Failed to generate tokens")
 	}
 
-	return httputil.SuccessResponse(c, fiber.StatusOK, fiber.Map{
-		"user":   user,
-		"tokens": tokens,
-	}, "Google login successful")
+	// Redirect to frontend with tokens as query params
+	frontendURL := "/auth/google/callback?access_token=" + tokens.AccessToken + "&refresh_token=" + tokens.RefreshToken
+	return c.Redirect(frontendURL, fiber.StatusTemporaryRedirect)
 }
 
 // Logout godoc

@@ -175,3 +175,116 @@ type TrendsResponse struct {
 	Data    []TrendPoint `json:"data"`
 	Message string       `json:"message" example:"Trends retrieved successfully"`
 }
+
+// --- Dashboard Response ---
+
+type DashboardStatsData struct {
+	TotalResults   int64   `json:"total_results"`
+	AvgRank        float64 `json:"avg_rank"`
+	KeywordsAtRisk int64   `json:"keywords_at_risk"`
+}
+
+type DashboardStatsResponse struct {
+	Success bool               `json:"success" example:"true"`
+	Code    int                `json:"code" example:"200"`
+	Data    DashboardStatsData `json:"data"`
+	Message string             `json:"message" example:"Dashboard stats retrieved successfully"`
+}
+
+// --- Enriched Job List Types ---
+
+type DomainInfo struct {
+	Domain     string `json:"domain"`
+	FaviconURL string `json:"favicon_url"`
+}
+
+type JobRunBrief struct {
+	ID          uint   `json:"id"`
+	Status      string `json:"status"`
+	CompletedAt *int64 `json:"completed_at"`
+	CreatedAt   int64  `json:"created_at"`
+}
+
+type JobListItem struct {
+	model.Job
+	KeywordCount       int          `json:"keyword_count"`
+	RegionCount        int          `json:"region_count"`
+	LastRun            *JobRunBrief `json:"last_run"`
+	HealthScore        *int         `json:"health_score"`
+	FaviconURL         string       `json:"favicon_url"`
+	CompetitorFavicons []DomainInfo `json:"competitor_favicons"`
+}
+
+// --- Job Stats Response ---
+
+type JobStatsData struct {
+	HealthScore     *int         `json:"health_score"`
+	Top3Rankings    int64        `json:"top_3_rankings"`
+	Top3Change      int64        `json:"top_3_change"`
+	VisibilityIndex float64      `json:"visibility_index"`
+	TotalKeywords   int          `json:"total_keywords"`
+	Competitors     []DomainInfo `json:"competitors"`
+	RunID           *uint        `json:"run_id"`
+}
+
+type JobStatsResponse struct {
+	Success bool         `json:"success" example:"true"`
+	Code    int          `json:"code" example:"200"`
+	Data    JobStatsData `json:"data"`
+	Message string       `json:"message" example:"Job stats retrieved successfully"`
+}
+
+// --- Report List Response ---
+
+type ReportListItem struct {
+	ID          uint   `json:"id"`
+	RunID       uint   `json:"run_id"`
+	Status      string `json:"status"`
+	HealthScore *int   `json:"health_score"`
+	Provider    string `json:"provider"`
+	CreatedAt   int64  `json:"created_at"`
+}
+
+// --- Run Metrics ---
+
+type RunMetrics struct {
+	AvgResponseTimeMs *float64 `json:"avg_response_time_ms"`
+	CompletedPairs    int      `json:"completed_pairs"`
+	FailedPairs       int      `json:"failed_pairs"`
+	TotalPairs        int      `json:"total_pairs"`
+}
+
+// --- Pair Detail Response Types ---
+
+type PairSummaryData struct {
+	Keyword         string  `json:"keyword"`
+	State           string  `json:"state"`
+	CurrentPosition int     `json:"current_position"`
+	Change          int     `json:"change"`
+	AvgPosition     float64 `json:"avg_position"`
+	BestPosition    int     `json:"best_position"`
+	WorstPosition   int     `json:"worst_position"`
+	TotalScans      int     `json:"total_scans"`
+	RunID           uint    `json:"run_id"`
+}
+
+type PairScanItem struct {
+	RunID       uint   `json:"run_id"`
+	ScanNumber  int    `json:"scan_number"`
+	Position    int    `json:"position"`
+	Change      int    `json:"change"`
+	Status      string `json:"status"`
+	ResultCount int    `json:"result_count"`
+	DurationNs  int64  `json:"duration_ns"`
+	HasReport   bool   `json:"has_report"`
+	CreatedAt   int64  `json:"created_at"`
+}
+
+type PairCompetitorData struct {
+	Domain      string  `json:"domain"`
+	FaviconURL  string  `json:"favicon_url"`
+	IsTarget    bool    `json:"is_target"`
+	Position    int     `json:"current_position"`
+	AvgPosition float64 `json:"avg_position"`
+	Change      int     `json:"change"`
+}

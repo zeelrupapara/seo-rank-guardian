@@ -13,10 +13,8 @@ type Config struct {
 	NATS     NATSConfig
 	Logger   LoggerConfig
 	OAuth    OAuthConfig
-	SMTP     SMTPConfig
-	AI       AIConfig
-	Google   GoogleConfig
-	Scraper  ScraperConfig
+	SMTP   SMTPConfig
+	Google GoogleConfig
 }
 
 type AppConfig struct {
@@ -26,12 +24,12 @@ type AppConfig struct {
 
 type HTTPConfig struct {
 	Host string `envconfig:"HTTP_HOST" default:"0.0.0.0"`
-	Port string `envconfig:"HTTP_PORT" default:"8080"`
+	Port string `envconfig:"HTTP_PORT" default:"8081"`
 }
 
 type PostgresConfig struct {
 	Host     string `envconfig:"POSTGRES_HOST" default:"localhost"`
-	Port     string `envconfig:"POSTGRES_PORT" default:"5432"`
+	Port     string `envconfig:"POSTGRES_PORT" default:"5433"`
 	User     string `envconfig:"POSTGRES_USER" default:"srg"`
 	Password string `envconfig:"POSTGRES_PASSWORD" default:"srg_secret"`
 	DB       string `envconfig:"POSTGRES_DB" default:"srg_db"`
@@ -40,13 +38,13 @@ type PostgresConfig struct {
 
 type RedisConfig struct {
 	Host     string `envconfig:"REDIS_HOST" default:"localhost"`
-	Port     string `envconfig:"REDIS_PORT" default:"6379"`
+	Port     string `envconfig:"REDIS_PORT" default:"6380"`
 	Password string `envconfig:"REDIS_PASSWORD" default:""`
 	DB       int    `envconfig:"REDIS_DB" default:"0"`
 }
 
 type NATSConfig struct {
-	URL string `envconfig:"NATS_URL" default:"nats://localhost:4222"`
+	URL string `envconfig:"NATS_URL" default:"nats://localhost:4223"`
 }
 
 type LoggerConfig struct {
@@ -72,27 +70,10 @@ type SMTPConfig struct {
 	From     string `envconfig:"SMTP_FROM" default:"noreply@example.com"`
 }
 
-type AIConfig struct {
-	Provider        string `envconfig:"AI_PROVIDER" default:"gemini"`
-	APIKey          string `envconfig:"AI_API_KEY" default:""`
-	Model           string `envconfig:"AI_MODEL" default:"gemini-2.0-flash"`
-	SearchGrounding bool   `envconfig:"AI_SEARCH_GROUNDING" default:"true"`
-	ReportMode      string `envconfig:"REPORT_MODE" default:"api"`
-	WebTimeout      int    `envconfig:"GEMINI_WEB_TIMEOUT_SEC" default:"300"`
-}
-
 type GoogleConfig struct {
 	ClientID     string `envconfig:"GOOGLE_CLIENT_ID" default:""`
 	ClientSecret string `envconfig:"GOOGLE_CLIENT_SECRET" default:""`
-	RedirectURL  string `envconfig:"GOOGLE_REDIRECT_URL" default:"http://localhost:8080/api/v1/auth/google/callback"`
-}
-
-type ScraperConfig struct {
-	ResultLimit int  `envconfig:"SCRAPE_RESULT_LIMIT" default:"10"`
-	MinDelayMs  int  `envconfig:"SCRAPE_MIN_DELAY_MS" default:"10000"`
-	MaxDelayMs  int  `envconfig:"SCRAPE_MAX_DELAY_MS" default:"20000"`
-	MaxRetries  int  `envconfig:"SCRAPE_MAX_RETRIES" default:"3"`
-	RodEnabled  bool `envconfig:"SCRAPE_ROD_ENABLED" default:"true"`
+	RedirectURL  string `envconfig:"GOOGLE_REDIRECT_URL" default:"http://localhost:8081/api/v1/auth/google/callback"`
 }
 
 func Load() (*Config, error) {
@@ -124,15 +105,8 @@ func Load() (*Config, error) {
 	if err := envconfig.Process("", &cfg.SMTP); err != nil {
 		return nil, err
 	}
-	if err := envconfig.Process("", &cfg.AI); err != nil {
-		return nil, err
-	}
 	if err := envconfig.Process("", &cfg.Google); err != nil {
 		return nil, err
 	}
-	if err := envconfig.Process("", &cfg.Scraper); err != nil {
-		return nil, err
-	}
-
 	return cfg, nil
 }

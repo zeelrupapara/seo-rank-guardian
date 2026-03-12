@@ -52,6 +52,7 @@ func (p *PostgresDB) Migrate() error {
 	err := p.DB.AutoMigrate(
 		&model.User{},
 		&model.Job{},
+		&model.JobKeyword{},
 		&model.JobRun{},
 		&model.SearchPair{},
 		&model.SearchResult{},

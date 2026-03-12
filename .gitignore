@@ -24,6 +24,9 @@ build-errors.log
 logs/
 *.log
 
+# Screen
+screens/*
+
 # IDE and editors
 .idea/
 .vscode/
@@ -55,3 +58,10 @@ mem.prof
 # Local overrides (optional)
 compose.override.yml
 *.local.yml
+
+# Python worker
+__pycache__/
+*.pyc
+*.pyo
+py-worker/.venv/
+py-worker/scraper_test.py
