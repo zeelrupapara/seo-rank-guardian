@@ -50,6 +50,7 @@ func (h *HttpServer) RegisterV1() {
 	jobs.Post("/:jobId/scrape", h.TriggerScrape)
 	jobs.Get("/:jobId/stats", h.JobStats)
 	jobs.Get("/:jobId/rankings", h.LatestRankings)
+	jobs.Get("/:jobId/tracking-pairs", h.TrackingPairs)
 	jobs.Get("/:jobId/trends", h.PositionTrends)
 	jobs.Get("/:jobId/reports", h.ListReports)
 	jobs.Get("/:jobId/runs", h.ListRuns)

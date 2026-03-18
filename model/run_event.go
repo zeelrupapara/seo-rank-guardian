@@ -19,6 +19,8 @@ const (
 	EventReportStarted  RunEventType = "report_started"
 	EventReportComplete RunEventType = "report_complete"
 	EventReportFailed   RunEventType = "report_failed"
+	EventScrapeRetry    RunEventType = "scrape_retry"
+	EventScrapeFallback RunEventType = "scrape_fallback"
 	EventRunComplete    RunEventType = "run_complete"
 	EventRunFailed      RunEventType = "run_failed"
 )

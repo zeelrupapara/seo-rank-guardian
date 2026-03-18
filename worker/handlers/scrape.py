@@ -50,6 +50,42 @@ async def handle_scrape_task(worker, data: bytes):
         )
         session.commit()
 
+    # Callback to stream retry/fallback events to LiveMonitor
+    async def search_event_cb(event_kind: str, details: dict):
+        if event_kind == "attempt_failed":
+            await worker.publish_event({
+                "type": "scrape_retry",
+                "run_id": run_id,
+                "job_id": job_id,
+                "payload": {
+                    "pair_id": pair_id,
+                    "keyword": keyword,
+                    "state": state,
+                    "message": f"Attempt {details['attempt']}/{details['max_retries']} failed: {details['error']}",
+                    "attempt": details["attempt"],
+                    "max_retries": details["max_retries"],
+                    "method": details["method"],
+                    "is_retryable": details.get("is_retryable", False),
+                    "retry_delay": details.get("retry_delay", 0),
+                },
+            })
+        elif event_kind in ("fallback", "fallback_success", "fallback_failed"):
+            await worker.publish_event({
+                "type": "scrape_fallback",
+                "run_id": run_id,
+                "job_id": job_id,
+                "payload": {
+                    "pair_id": pair_id,
+                    "keyword": keyword,
+                    "state": state,
+                    "message": f"Falling back to {details['method']}" if event_kind == "fallback"
+                        else f"Serper API {'succeeded' if event_kind == 'fallback_success' else 'failed'}"
+                        + (f": {details.get('error', '')}" if event_kind == "fallback_failed" else ""),
+                    "method": details.get("method", ""),
+                    "reason": details.get("reason", ""),
+                },
+            })
+
     # Scrape Google
     try:
         results, search_method = await worker.scraper.search_async(
@@ -57,6 +93,7 @@ async def handle_scrape_task(worker, data: bytes):
             region=country.lower(),
             language="en",
             result_limit=worker.settings.scrape_result_limit,
+            on_event=search_event_cb,
         )
     except Exception as e:
         search_method = "all_failed"
@@ -172,12 +209,17 @@ async def handle_scrape_task(worker, data: bytes):
 
 async def _check_run_completion(worker, run_id: int, job_id: int):
     with worker.session_factory() as session:
-        run = session.query(JobRun).filter(JobRun.id == run_id).first()
+        # Use FOR UPDATE to prevent two workers from finalizing the same run
+        run = session.query(JobRun).filter(JobRun.id == run_id).with_for_update().first()
         if not run:
             log.error("Failed to load run for completion check", run_id=run_id)
             return
 
         if run.completed_pairs + run.failed_pairs < run.total_pairs:
+            return
+
+        # Already finalized by another worker
+        if run.status in ("completed", "partial", "failed"):
             return
 
         # Capture values before session closes

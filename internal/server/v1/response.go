@@ -288,3 +288,16 @@ type PairCompetitorData struct {
 	AvgPosition float64 `json:"avg_position"`
 	Change      int     `json:"change"`
 }
+
+// --- Tracking Pairs Response ---
+
+type TrackingPairEntry struct {
+	Keyword        string `json:"keyword"`
+	State          string `json:"state"`
+	Country        string `json:"country"`
+	HasData        bool   `json:"has_data"`
+	LatestPosition int    `json:"latest_position"`
+	PrevPosition   int    `json:"prev_position"`
+	Change         string `json:"change"`
+	LastScannedAt  *int64 `json:"last_scanned_at"`
+}

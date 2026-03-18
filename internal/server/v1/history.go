@@ -724,6 +724,205 @@ func (h *HttpServer) PairCompetitors(c *fiber.Ctx) error {
 	return httputil.SuccessResponse(c, fiber.StatusOK, data, "Pair competitors retrieved successfully")
 }
 
+// TrackingPairs godoc
+// @Summary Get keyword x region tracking pairs
+// @Description Returns all keyword x region pairs from job config with latest scan data if available
+// @Tags jobs
+// @Produce json
+// @Security BearerAuth
+// @Param jobId path int true "Job ID"
+// @Param search query string false "Filter keywords by search term"
+// @Param region query string false "Filter by state/region"
+// @Param page query int false "Page number (default 1)"
+// @Param limit query int false "Items per page (default 20)"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} ErrorResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Router /jobs/{jobId}/tracking-pairs [get]
+func (h *HttpServer) TrackingPairs(c *fiber.Ctx) error {
+	userID, ok := c.Locals("userId").(uint)
+	if !ok {
+		return httputil.ErrorResponse(c, fiber.StatusUnauthorized, apperrors.ErrUnauthorized.Error(), "Unauthorized")
+	}
+
+	jobID, err := strconv.ParseUint(c.Params("jobId"), 10, 64)
+	if err != nil {
+		return httputil.ErrorResponse(c, fiber.StatusBadRequest, apperrors.ErrBadRequest.Error(), "Invalid job ID")
+	}
+
+	// Load job with keywords
+	var job model.Job
+	if err := h.DB.Preload("Keywords").Where("id = ? AND user_id = ?", jobID, userID).First(&job).Error; err != nil {
+		return httputil.ErrorResponse(c, fiber.StatusNotFound, apperrors.ErrJobNotFound.Error(), "Job not found")
+	}
+
+	regions := job.GetRegions()
+
+	// Build all keyword x region pairs
+	type pair struct {
+		keyword string
+		state   string
+		country string
+	}
+	var allPairs []pair
+	for _, kw := range job.Keywords {
+		for _, r := range regions {
+			allPairs = append(allPairs, pair{keyword: kw.Keyword, state: r.State, country: r.Country})
+		}
+	}
+
+	// Apply filters
+	search := c.Query("search")
+	region := c.Query("region")
+	if search != "" || region != "" {
+		var filtered []pair
+		for _, p := range allPairs {
+			if search != "" && !strings.Contains(strings.ToLower(p.keyword), strings.ToLower(search)) {
+				continue
+			}
+			if region != "" && p.state != region {
+				continue
+			}
+			filtered = append(filtered, p)
+		}
+		allPairs = filtered
+	}
+
+	// Pagination
+	total := len(allPairs)
+	page, pageSize := parsePagination(c)
+	offset := (page - 1) * pageSize
+	end := offset + pageSize
+	if offset > total {
+		offset = total
+	}
+	if end > total {
+		end = total
+	}
+	pagedPairs := allPairs[offset:end]
+
+	// Try to find latest and previous completed runs
+	var latestRun, prevRun model.JobRun
+	hasLatest := h.DB.Where("job_id = ? AND status IN ?", jobID, []string{"completed", "partial"}).
+		Order("created_at DESC").First(&latestRun).Error == nil
+
+	hasPrev := false
+	if hasLatest {
+		hasPrev = h.DB.Where("job_id = ? AND status IN ? AND id < ?", jobID, []string{"completed", "partial"}, latestRun.ID).
+			Order("created_at DESC").First(&prevRun).Error == nil
+	}
+
+	// Batch-fetch scan status and target positions for the paged pairs from latest run
+	type posKey struct{ keyword, state string }
+	latestPosMap := make(map[posKey]int)
+	prevPosMap := make(map[posKey]int)
+
+	type scannedInfo struct {
+		status     string
+		finishedAt *int64
+	}
+	scannedMap := make(map[posKey]scannedInfo)
+
+	if hasLatest && len(pagedPairs) > 0 {
+		// Build keyword/state lists for IN query
+		keywords := make([]string, len(pagedPairs))
+		states := make([]string, len(pagedPairs))
+		for i, p := range pagedPairs {
+			keywords[i] = p.keyword
+			states[i] = p.state
+		}
+
+		// Query srg_search_pairs for scan status (determines has_data)
+		type pairRow struct {
+			Keyword    string
+			State      string
+			Status     string
+			FinishedAt *int64
+		}
+		var pairRows []pairRow
+		h.DB.Raw(`SELECT keyword, state, status, finished_at FROM srg_search_pairs
+			WHERE run_id = ? AND keyword IN ? AND state IN ?`,
+			latestRun.ID, keywords, states).Scan(&pairRows)
+
+		for _, r := range pairRows {
+			scannedMap[posKey{r.Keyword, r.State}] = scannedInfo{
+				status:     r.Status,
+				finishedAt: r.FinishedAt,
+			}
+		}
+
+		// Query srg_search_results for target positions (optional enrichment)
+		type resultRow struct {
+			Keyword  string
+			State    string
+			Position int
+		}
+		var latestResults []resultRow
+		h.DB.Raw(`SELECT keyword, state, position FROM srg_search_results
+			WHERE run_id = ? AND is_target = true AND keyword IN ? AND state IN ?`,
+			latestRun.ID, keywords, states).Scan(&latestResults)
+
+		for _, r := range latestResults {
+			latestPosMap[posKey{r.Keyword, r.State}] = r.Position
+		}
+
+		if hasPrev {
+			var prevResults []resultRow
+			h.DB.Raw(`SELECT keyword, state, position FROM srg_search_results
+				WHERE run_id = ? AND is_target = true AND keyword IN ? AND state IN ?`,
+				prevRun.ID, keywords, states).Scan(&prevResults)
+			for _, r := range prevResults {
+				prevPosMap[posKey{r.Keyword, r.State}] = r.Position
+			}
+		}
+	}
+
+	// Build response
+	entries := make([]TrackingPairEntry, len(pagedPairs))
+	for i, p := range pagedPairs {
+		k := posKey{p.keyword, p.state}
+		info := scannedMap[k]
+		hasData := info.status == "completed"
+		latestPos := latestPosMap[k]
+		prevPos := prevPosMap[k]
+
+		change := ""
+		if hasData {
+			if prevPos > 0 && latestPos > 0 {
+				delta := prevPos - latestPos
+				if delta > 0 {
+					change = "improved"
+				} else if delta < 0 {
+					change = "dropped"
+				} else {
+					change = "stable"
+				}
+			} else {
+				change = "new"
+			}
+		}
+
+		entries[i] = TrackingPairEntry{
+			Keyword:        p.keyword,
+			State:          p.state,
+			Country:        p.country,
+			HasData:        hasData,
+			LatestPosition: latestPos,
+			PrevPosition:   prevPos,
+			Change:         change,
+			LastScannedAt:  info.finishedAt,
+		}
+	}
+
+	return httputil.SuccessResponse(c, fiber.StatusOK, fiber.Map{
+		"pairs": entries,
+		"total": total,
+		"page":  page,
+		"limit": pageSize,
+	}, "Tracking pairs retrieved successfully")
+}
+
 // --- Helper ---
 
 func (h *HttpServer) buildRankings(runID, _ uint) []RankingEntry {

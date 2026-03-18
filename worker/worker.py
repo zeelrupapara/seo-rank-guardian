@@ -3,7 +3,7 @@ import json
 import time
 
 import nats
-from nats.js.api import RetentionPolicy, StreamConfig
+from nats.js.api import ConsumerConfig, RetentionPolicy, StreamConfig
 import structlog
 
 from config import Settings
@@ -55,23 +55,39 @@ class Worker:
         await self._ensure_stream("SRG_LOGS", ["srg.logs.>"])
         await self._ensure_stream("SRG_WS", ["srg.ws.>"])
 
-        # Push-based subscription with durable consumer
+        # One-time migration: remove old non-queue consumer
+        try:
+            await self.js.delete_consumer("SRG_JOBS", "srg-worker-py")
+            log.info("Deleted old consumer", consumer="srg-worker-py")
+        except Exception:
+            pass
+
+        # Queue group config — enables horizontal scaling (N workers, round-robin delivery)
+        config = ConsumerConfig(
+            ack_wait=600,          # 10 min — longest scrape can take 5-6 min
+            max_deliver=3,         # Retry up to 3 times on failure
+            max_ack_pending=10,    # Prefetch limit per worker instance
+        )
+
+        # Push-based subscription with queue group
         try:
             self.sub = await self.js.subscribe(
                 "srg.jobs.>",
-                durable="srg-worker-py",
+                queue="srg-workers",
+                config=config,
                 manual_ack=True,
             )
         except Exception as e:
             # Consumer config may conflict — delete and recreate
             log.warning("Subscribe failed, recreating consumer", error=str(e))
             try:
-                await self.js.delete_consumer("SRG_JOBS", "srg-worker-py")
+                await self.js.delete_consumer("SRG_JOBS", "srg-workers")
             except Exception:
                 pass
             self.sub = await self.js.subscribe(
                 "srg.jobs.>",
-                durable="srg-worker-py",
+                queue="srg-workers",
+                config=config,
                 manual_ack=True,
             )
 

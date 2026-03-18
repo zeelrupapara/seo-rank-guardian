@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import List, Tuple
+from typing import Callable, List, Optional, Tuple
 from urllib.parse import quote_plus, urlparse
 
 import structlog
@@ -107,8 +107,17 @@ class GoogleScraper:
         region: str = "us",
         language: str = "en",
         result_limit: int = 10,
+        on_event: Optional[Callable] = None,
     ) -> Tuple[List[GoogleSearchResult], str]:
         attempted_methods = []
+
+        async def _emit(kind: str, details: dict):
+            if on_event is None:
+                return
+            try:
+                await on_event(kind, details)
+            except Exception:
+                pass  # never let callback errors break scraping
 
         gl = _normalize_region(region)
         url = (
@@ -122,6 +131,7 @@ class GoogleScraper:
         max_retries = 5
         for attempt in range(1, max_retries + 1):
             log.info("search.attempt", method=method, query=query, gl=gl, attempt=attempt)
+            await _emit("attempt", {"attempt": attempt, "max_retries": max_retries, "method": method})
             t0 = time.monotonic()
             try:
                 results = await self._search_browser(url, result_limit)
@@ -136,8 +146,12 @@ class GoogleScraper:
                 err_str = str(e).lower()
                 is_retryable = "429" in err_str or "rate limit" in err_str or "captcha" in err_str
                 log.warning("search.failed", method=method, error=str(e), elapsed_ms=elapsed_ms, attempt=attempt)
+                delay = 2 + attempt if (is_retryable and attempt < max_retries) else 0
+                await _emit("attempt_failed", {
+                    "attempt": attempt, "max_retries": max_retries, "method": method,
+                    "error": str(e), "is_retryable": is_retryable, "retry_delay": delay,
+                })
                 if is_retryable and attempt < max_retries:
-                    delay = 2 + attempt  # increasing backoff: 3s, 4s, 5s, 6s
                     log.info("search.retry", reason="retryable_error_rotating_ip", next_attempt=attempt + 1, delay_s=delay)
                     await asyncio.sleep(delay)
                     continue
@@ -147,6 +161,7 @@ class GoogleScraper:
         if self.serper_api_key:
             method = "serper_api"
             attempted_methods.append(method)
+            await _emit("fallback", {"method": "serper_api", "reason": "browser_exhausted"})
             log.info("search.attempt", method=method, query=query, region=region)
             t0 = time.monotonic()
             try:
@@ -154,10 +169,12 @@ class GoogleScraper:
                 elapsed_ms = round((time.monotonic() - t0) * 1000)
                 if results:
                     log.info("search.success", method=method, result_count=len(results), elapsed_ms=elapsed_ms)
+                    await _emit("fallback_success", {"method": "serper_api", "result_count": len(results)})
                     return results, method
             except Exception as e:
                 elapsed_ms = round((time.monotonic() - t0) * 1000)
                 log.warning("search.failed", method=method, error=str(e), elapsed_ms=elapsed_ms)
+                await _emit("fallback_failed", {"method": "serper_api", "error": str(e)})
 
         log.error("search.all_failed", query=query, attempts=attempted_methods)
         raise Exception("All search methods failed")
