@@ -11,6 +11,7 @@ import (
 	"github.com/zeelrupapara/seo-rank-guardian/pkg/manager"
 	natspkg "github.com/zeelrupapara/seo-rank-guardian/pkg/nats"
 	"github.com/zeelrupapara/seo-rank-guardian/pkg/oauth2"
+	schedulerpkg "github.com/zeelrupapara/seo-rank-guardian/pkg/scheduler"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -27,6 +28,7 @@ type HttpServer struct {
 	Nats        *natspkg.NatsClient
 	GoogleOAuth *oauth2.GoogleOAuth
 	Hub         *manager.Hub
+	Scheduler   *schedulerpkg.Scheduler
 }
 
 func NewHttpServer(

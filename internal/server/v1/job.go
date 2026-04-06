@@ -17,7 +17,7 @@ type JobRequest struct {
 	Name         string            `json:"name" validate:"required,min=1,max=255"`
 	Domain       string            `json:"domain" validate:"required,min=1,max=255"`
 	IsActive     *bool             `json:"is_active"`
-	ScheduleTime string            `json:"schedule_time" validate:"omitempty,max=10"`
+	ScheduleTime string            `json:"schedule_time" validate:"omitempty,max=100"`
 	Competitors  []string          `json:"competitors"`
 	Keywords     []string          `json:"keywords" validate:"required,min=1"`
 	Regions      []model.JobRegion `json:"regions" validate:"required,min=1"`
@@ -106,6 +106,10 @@ func (h *HttpServer) CreateJob(c *fiber.Ctx) error {
 
 	if err := h.DB.Create(&job).Error; err != nil {
 		return httputil.ErrorResponse(c, fiber.StatusInternalServerError, apperrors.ErrInternalServer.Error(), "Failed to create job")
+	}
+
+	if h.Scheduler != nil {
+		h.Scheduler.AddJob(job)
 	}
 
 	return httputil.SuccessResponse(c, fiber.StatusCreated, job, "Job created successfully")
@@ -409,6 +413,10 @@ func (h *HttpServer) UpdateJob(c *fiber.Ctx) error {
 	// Reload keywords for response
 	h.DB.Where("job_id = ?", jobID).Find(&job.Keywords)
 
+	if h.Scheduler != nil {
+		h.Scheduler.AddJob(job)
+	}
+
 	return httputil.SuccessResponse(c, fiber.StatusOK, job, "Job updated successfully")
 }
 
@@ -443,42 +451,16 @@ func (h *HttpServer) DeleteJob(c *fiber.Ctx) error {
 		return httputil.ErrorResponse(c, fiber.StatusNotFound, apperrors.ErrJobNotFound.Error(), "Job not found")
 	}
 
+	if h.Scheduler != nil {
+		h.Scheduler.RemoveJob(uint(jobID))
+	}
+
 	return httputil.SuccessResponse(c, fiber.StatusOK, nil, "Job deleted successfully")
 }
 
-// TriggerScrape godoc
-// @Summary Trigger a scrape
-// @Description Manually trigger a scrape run for a job
-// @Tags jobs
-// @Produce json
-// @Security BearerAuth
-// @Param jobId path int true "Job ID"
-// @Success 201 {object} ScrapeResponse
-// @Failure 400 {object} ErrorResponse
-// @Failure 401 {object} ErrorResponse
-// @Failure 404 {object} ErrorResponse
-// @Failure 409 {object} ErrorResponse
-// @Router /jobs/{jobId}/scrape [post]
-func (h *HttpServer) TriggerScrape(c *fiber.Ctx) error {
-	userID, ok := c.Locals("userId").(uint)
-	if !ok {
-		return httputil.ErrorResponse(c, fiber.StatusUnauthorized, apperrors.ErrUnauthorized.Error(), "Unauthorized")
-	}
-
-	jobID, err := strconv.ParseUint(c.Params("jobId"), 10, 64)
-	if err != nil {
-		return httputil.ErrorResponse(c, fiber.StatusBadRequest, apperrors.ErrBadRequest.Error(), "Invalid job ID")
-	}
-
-	var job model.Job
-	if err := h.DB.Preload("Keywords").Where("id = ? AND user_id = ?", jobID, userID).First(&job).Error; err != nil {
-		return httputil.ErrorResponse(c, fiber.StatusNotFound, apperrors.ErrJobNotFound.Error(), "Job not found")
-	}
-
-	if !job.IsActive {
-		return httputil.ErrorResponse(c, fiber.StatusBadRequest, apperrors.ErrJobNotActive.Error(), "Job is not active")
-	}
-
+// TriggerScrapeForJob is the shared logic called by both TriggerScrape (HTTP)
+// and the scheduler. Returns "run_in_progress" error string if a run is active.
+func (h *HttpServer) TriggerScrapeForJob(job model.Job, triggeredBy string, userID uint) (*model.JobRun, error) {
 	regions := job.GetRegions()
 	totalPairs := len(job.Keywords) * len(regions)
 
@@ -487,13 +469,13 @@ func (h *HttpServer) TriggerScrape(c *fiber.Ctx) error {
 		JobID:       job.ID,
 		Status:      "running",
 		TotalPairs:  totalPairs,
-		TriggeredBy: "manual",
+		TriggeredBy: triggeredBy,
 		StartedAt:   &now,
 	}
 	run.CreatedBy = userID
 
 	// Use a transaction to atomically check for in-progress runs and create new one
-	err = h.DB.Transaction(func(tx *gorm.DB) error {
+	err := h.DB.Transaction(func(tx *gorm.DB) error {
 		var runningCount int64
 		if err := tx.Model(&model.JobRun{}).
 			Where("job_id = ? AND status IN ?", job.ID, []string{"pending", "running"}).
@@ -506,11 +488,7 @@ func (h *HttpServer) TriggerScrape(c *fiber.Ctx) error {
 		return tx.Create(&run).Error
 	})
 	if err != nil {
-		if err.Error() == "run_in_progress" {
-			return httputil.ErrorResponse(c, fiber.StatusConflict, apperrors.ErrRunInProgress.Error(), "A run is already in progress")
-		}
-		h.Log.Errorf("Failed to create run for job %d: %v", job.ID, err)
-		return httputil.ErrorResponse(c, fiber.StatusInternalServerError, apperrors.ErrInternalServer.Error(), "Failed to create run")
+		return nil, err
 	}
 
 	// Emit run_started event
@@ -592,12 +570,57 @@ func (h *HttpServer) TriggerScrape(c *fiber.Ctx) error {
 	// Update TotalPairs to reflect actually created pairs
 	if createdPairs != totalPairs {
 		h.DB.Model(&run).Update("total_pairs", createdPairs)
-		totalPairs = createdPairs
+		run.TotalPairs = createdPairs
+	}
+
+	return &run, nil
+}
+
+// TriggerScrape godoc
+// @Summary Trigger a scrape
+// @Description Manually trigger a scrape run for a job
+// @Tags jobs
+// @Produce json
+// @Security BearerAuth
+// @Param jobId path int true "Job ID"
+// @Success 201 {object} ScrapeResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 409 {object} ErrorResponse
+// @Router /jobs/{jobId}/scrape [post]
+func (h *HttpServer) TriggerScrape(c *fiber.Ctx) error {
+	userID, ok := c.Locals("userId").(uint)
+	if !ok {
+		return httputil.ErrorResponse(c, fiber.StatusUnauthorized, apperrors.ErrUnauthorized.Error(), "Unauthorized")
+	}
+
+	jobID, err := strconv.ParseUint(c.Params("jobId"), 10, 64)
+	if err != nil {
+		return httputil.ErrorResponse(c, fiber.StatusBadRequest, apperrors.ErrBadRequest.Error(), "Invalid job ID")
+	}
+
+	var job model.Job
+	if err := h.DB.Preload("Keywords").Where("id = ? AND user_id = ?", jobID, userID).First(&job).Error; err != nil {
+		return httputil.ErrorResponse(c, fiber.StatusNotFound, apperrors.ErrJobNotFound.Error(), "Job not found")
+	}
+
+	if !job.IsActive {
+		return httputil.ErrorResponse(c, fiber.StatusBadRequest, apperrors.ErrJobNotActive.Error(), "Job is not active")
+	}
+
+	run, err := h.TriggerScrapeForJob(job, "manual", userID)
+	if err != nil {
+		if err.Error() == "run_in_progress" {
+			return httputil.ErrorResponse(c, fiber.StatusConflict, apperrors.ErrRunInProgress.Error(), "A run is already in progress")
+		}
+		h.Log.Errorf("Failed to create run for job %d: %v", job.ID, err)
+		return httputil.ErrorResponse(c, fiber.StatusInternalServerError, apperrors.ErrInternalServer.Error(), "Failed to create run")
 	}
 
 	return httputil.SuccessResponse(c, fiber.StatusCreated, fiber.Map{
 		"run":         run,
-		"total_pairs": totalPairs,
+		"total_pairs": run.TotalPairs,
 	}, "Scrape triggered successfully")
 }
 

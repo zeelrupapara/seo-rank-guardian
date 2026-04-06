@@ -10,6 +10,7 @@ import (
 	"github.com/zeelrupapara/seo-rank-guardian/config"
 	"github.com/zeelrupapara/seo-rank-guardian/internal/middleware"
 	"github.com/zeelrupapara/seo-rank-guardian/internal/server"
+	"github.com/zeelrupapara/seo-rank-guardian/model"
 	"github.com/zeelrupapara/seo-rank-guardian/pkg/authz"
 	"github.com/zeelrupapara/seo-rank-guardian/pkg/cache"
 	"github.com/zeelrupapara/seo-rank-guardian/pkg/db"
@@ -19,6 +20,7 @@ import (
 	natspkg "github.com/zeelrupapara/seo-rank-guardian/pkg/nats"
 	pkgoauth2 "github.com/zeelrupapara/seo-rank-guardian/pkg/oauth2"
 	redispkg "github.com/zeelrupapara/seo-rank-guardian/pkg/redis"
+	schedulerpkg "github.com/zeelrupapara/seo-rank-guardian/pkg/scheduler"
 	"github.com/zeelrupapara/seo-rank-guardian/pkg/seed"
 )
 
@@ -96,6 +98,17 @@ func Start() error {
 	srv := server.NewServer(app, mw, pgDB.DB, appCache, log, validate, cfg, o, natsClient, googleOAuth, hub)
 	srv.Register()
 
+	// Init scheduler — wraps triggerScrapeForJob as a TriggerFunc
+	sched := schedulerpkg.New(pgDB.DB, log, func(job model.Job, triggeredBy string, userID uint) error {
+		_, err := srv.HttpServer.TriggerScrapeForJob(job, triggeredBy, userID)
+		return err
+	})
+	if err := sched.LoadAll(); err != nil {
+		log.Warnf("Scheduler load warning: %v", err)
+	}
+	srv.HttpServer.Scheduler = sched
+	sched.Start()
+
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
@@ -109,6 +122,7 @@ func Start() error {
 
 	<-quit
 	log.Info("Shutting down server...")
+	sched.Stop()
 	natsClient.Close()
 	return app.Shutdown()
 }

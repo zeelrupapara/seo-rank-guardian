@@ -21,7 +21,7 @@ type Job struct {
 	Name         string         `json:"name" gorm:"size:255;not null"`
 	Domain       string         `json:"domain" gorm:"size:255;not null"`
 	IsActive     bool           `json:"is_active" gorm:"default:true"`
-	ScheduleTime string         `json:"schedule_time" gorm:"size:10"`
+	ScheduleTime string         `json:"schedule_time" gorm:"size:100"`
 	Competitors  datatypes.JSON `json:"competitors" swaggertype:"array,string"`
 	Keywords     []JobKeyword   `json:"keywords" gorm:"foreignKey:JobID"`
 	Regions      datatypes.JSON `json:"regions" swaggertype:"string"`
