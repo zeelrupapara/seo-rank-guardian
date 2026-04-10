@@ -10,13 +10,33 @@ import (
 
 func Run(db *gorm.DB, az *authz.Authz, log *zap.SugaredLogger) error {
 	policies := [][]string{
+		// user role — app access
+		{"user", authz.ResourceProfile, authz.ActionRead},
+		{"user", authz.ResourceProfile, authz.ActionWrite},
+		{"user", authz.ResourceDashboard, authz.ActionRead},
+		{"user", authz.ResourceJobs, authz.ActionRead},
+		{"user", authz.ResourceJobs, authz.ActionWrite},
+		{"user", authz.ResourceJobs, authz.ActionDelete},
+		{"user", authz.ResourceRuns, authz.ActionRead},
+		{"user", authz.ResourceReports, authz.ActionRead},
+
+		// admin role — app access (same as user)
+		{"admin", authz.ResourceProfile, authz.ActionRead},
+		{"admin", authz.ResourceProfile, authz.ActionWrite},
+		{"admin", authz.ResourceDashboard, authz.ActionRead},
+		{"admin", authz.ResourceJobs, authz.ActionRead},
+		{"admin", authz.ResourceJobs, authz.ActionWrite},
+		{"admin", authz.ResourceJobs, authz.ActionDelete},
+		{"admin", authz.ResourceRuns, authz.ActionRead},
+		{"admin", authz.ResourceReports, authz.ActionRead},
+
+		// admin role — admin-only resources
 		{"admin", authz.ResourceUsers, authz.ActionRead},
 		{"admin", authz.ResourceUsers, authz.ActionWrite},
 		{"admin", authz.ResourceUsers, authz.ActionDelete},
-		{"admin", authz.ResourceProfile, authz.ActionRead},
-		{"admin", authz.ResourceProfile, authz.ActionWrite},
-		{"user", authz.ResourceProfile, authz.ActionRead},
-		{"user", authz.ResourceProfile, authz.ActionWrite},
+		{"admin", authz.ResourcePolicies, authz.ActionRead},
+		{"admin", authz.ResourcePolicies, authz.ActionWrite},
+		{"admin", authz.ResourcePolicies, authz.ActionDelete},
 	}
 
 	for _, p := range policies {
