@@ -15,6 +15,12 @@ const (
 	ResourceReports   = "reports"
 	ResourceUsers     = "users"
 	ResourcePolicies  = "policies"
+	ResourceSessions  = "sessions"
+	ResourceAudit     = "audit"
+	ResourceIPFilters    = "ip_filters"
+	ResourceRateLimits   = "rate_limits"
+	ResourceBotDetection = "bot_detection"
+	ResourceAnalytics    = "analytics"
 
 	ActionRead   = "read"
 	ActionWrite  = "write"
@@ -22,7 +28,7 @@ const (
 )
 
 func AllResources() []string {
-	return []string{ResourceProfile, ResourceDashboard, ResourceJobs, ResourceRuns, ResourceReports, ResourceUsers, ResourcePolicies}
+	return []string{ResourceProfile, ResourceDashboard, ResourceJobs, ResourceRuns, ResourceReports, ResourceUsers, ResourcePolicies, ResourceSessions, ResourceAudit, ResourceIPFilters, ResourceRateLimits, ResourceBotDetection, ResourceAnalytics}
 }
 
 func AllActions() []string {

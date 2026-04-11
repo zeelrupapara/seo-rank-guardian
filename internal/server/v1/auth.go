@@ -11,6 +11,7 @@ import (
 	apperrors "github.com/zeelrupapara/seo-rank-guardian/pkg/errors"
 	httputil "github.com/zeelrupapara/seo-rank-guardian/pkg/http"
 	"github.com/zeelrupapara/seo-rank-guardian/model"
+	"github.com/zeelrupapara/seo-rank-guardian/pkg/oauth2"
 	"github.com/zeelrupapara/seo-rank-guardian/utils"
 )
 
@@ -27,6 +28,39 @@ type LoginRequest struct {
 
 type RefreshRequest struct {
 	RefreshToken string `json:"refresh_token" validate:"required"`
+}
+
+// createSession creates a DB session record and generates a token pair.
+// Called by Login, Register, and GoogleCallback to avoid duplication.
+func (h *HttpServer) createSession(c *fiber.Ctx, userID uint, role, loginMethod string) (*oauth2.TokenPair, *model.Session, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return nil, nil, err
+	}
+	sessionID := hex.EncodeToString(b)
+
+	now := time.Now()
+	session := model.Session{
+		ID:           sessionID,
+		UserID:       userID,
+		IPAddress:    c.IP(),
+		UserAgent:    c.Get("User-Agent"),
+		DeviceInfo:   utils.ParseDeviceInfo(c.Get("User-Agent")),
+		LoginMethod:  loginMethod,
+		LastActiveAt: now.UnixNano(),
+		ExpiresAt:    now.Add(h.OAuth2.RefreshExpiry()).UnixNano(),
+	}
+	if err := h.DB.Create(&session).Error; err != nil {
+		return nil, nil, err
+	}
+
+	tokens, err := h.OAuth2.GenerateTokenPair(userID, role, sessionID)
+	if err != nil {
+		h.DB.Delete(&session)
+		return nil, nil, err
+	}
+
+	return tokens, &session, nil
 }
 
 // Register godoc
@@ -76,11 +110,12 @@ func (h *HttpServer) Register(c *fiber.Ctx) error {
 		return httputil.ErrorResponse(c, fiber.StatusInternalServerError, apperrors.ErrInternalServer.Error(), "Failed to create user")
 	}
 
-	tokens, err := h.OAuth2.GenerateTokenPair(user.ID, user.Role)
+	tokens, _, err := h.createSession(c, user.ID, user.Role, "password")
 	if err != nil {
 		return httputil.ErrorResponse(c, fiber.StatusInternalServerError, apperrors.ErrInternalServer.Error(), "Failed to generate tokens")
 	}
 
+	h.writeAudit(c, user.ID, user.Username, "auth.register", "user", fmtID(user.ID), nil)
 	return httputil.SuccessResponse(c, fiber.StatusCreated, fiber.Map{
 		"user":   user,
 		"tokens": tokens,
@@ -121,11 +156,12 @@ func (h *HttpServer) Login(c *fiber.Ctx) error {
 		return httputil.ErrorResponse(c, fiber.StatusForbidden, apperrors.ErrForbidden.Error(), "Account is deactivated")
 	}
 
-	tokens, err := h.OAuth2.GenerateTokenPair(user.ID, user.Role)
+	tokens, _, err := h.createSession(c, user.ID, user.Role, "password")
 	if err != nil {
 		return httputil.ErrorResponse(c, fiber.StatusInternalServerError, apperrors.ErrInternalServer.Error(), "Failed to generate tokens")
 	}
 
+	h.writeAudit(c, user.ID, user.Username, "auth.login", "user", fmtID(user.ID), nil)
 	return httputil.SuccessResponse(c, fiber.StatusOK, fiber.Map{
 		"user":   user,
 		"tokens": tokens,
@@ -158,7 +194,13 @@ func (h *HttpServer) RefreshToken(c *fiber.Ctx) error {
 		return httputil.ErrorResponse(c, fiber.StatusUnauthorized, apperrors.ErrInvalidToken.Error(), "Invalid refresh token")
 	}
 
-	tokens, err := h.OAuth2.GenerateTokenPair(claims.UserID, claims.Role)
+	// Lazy update: track last activity only on refresh, not every request
+	h.DB.Model(&model.Session{}).
+		Where("id = ? AND revoked_at IS NULL", claims.SessionID).
+		Update("last_active_at", time.Now().UnixNano())
+
+	// Re-issue tokens with the same session ID so the session persists
+	tokens, err := h.OAuth2.GenerateTokenPair(claims.UserID, claims.Role, claims.SessionID)
 	if err != nil {
 		return httputil.ErrorResponse(c, fiber.StatusInternalServerError, apperrors.ErrInternalServer.Error(), "Failed to generate tokens")
 	}
@@ -296,11 +338,12 @@ func (h *HttpServer) GoogleCallback(c *fiber.Ctx) error {
 		return httputil.ErrorResponse(c, fiber.StatusForbidden, apperrors.ErrForbidden.Error(), "Account is deactivated")
 	}
 
-	tokens, err := h.OAuth2.GenerateTokenPair(user.ID, user.Role)
+	tokens, _, err := h.createSession(c, user.ID, user.Role, "google")
 	if err != nil {
 		return httputil.ErrorResponse(c, fiber.StatusInternalServerError, apperrors.ErrInternalServer.Error(), "Failed to generate tokens")
 	}
 
+	h.writeAudit(c, user.ID, user.Username, "auth.oauth_login", "user", fmtID(user.ID), nil)
 	// Redirect to frontend with tokens as query params
 	frontendURL := "/auth/google/callback?access_token=" + tokens.AccessToken + "&refresh_token=" + tokens.RefreshToken
 	return c.Redirect(frontendURL, fiber.StatusTemporaryRedirect)
@@ -320,10 +363,24 @@ func (h *HttpServer) Logout(c *fiber.Ctx) error {
 	if !ok {
 		return httputil.ErrorResponse(c, fiber.StatusUnauthorized, apperrors.ErrUnauthorized.Error(), "Unauthorized")
 	}
+	sessionID, _ := c.Locals("sessionId").(string)
 
-	if err := h.OAuth2.RevokeSession(userID); err != nil {
-		return httputil.ErrorResponse(c, fiber.StatusInternalServerError, apperrors.ErrInternalServer.Error(), "Failed to logout")
-	}
+	// Remove refresh token from Redis
+	// NOTE: We do NOT call MarkSessionRevoked here — the caller is handing in
+	// their own token right now, so there is no replay risk for the access token.
+	_ = h.OAuth2.RevokeSession(sessionID)
 
+	// Mark session as revoked in DB for audit trail
+	now := time.Now()
+	h.DB.Model(&model.Session{}).
+		Where("id = ?", sessionID).
+		Updates(map[string]any{
+			"revoked_at": now,
+			"revoked_by": userID,
+		})
+
+	var actingUser model.User
+	h.DB.Select("username").First(&actingUser, userID)
+	h.writeAudit(c, userID, actingUser.Username, "auth.logout", "user", fmtID(userID), nil)
 	return httputil.SuccessResponse(c, fiber.StatusOK, nil, "Logged out successfully")
 }

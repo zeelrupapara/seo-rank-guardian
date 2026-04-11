@@ -51,6 +51,12 @@ func NewPostgresDB(cfg config.PostgresConfig, log *zap.SugaredLogger) (*Postgres
 func (p *PostgresDB) Migrate() error {
 	err := p.DB.AutoMigrate(
 		&model.User{},
+		&model.Session{},
+		&model.AuditLog{},
+		&model.IPFilter{},
+		&model.RateLimit{},
+		&model.BotDetectionRule{},
+		&model.RequestLog{},
 		&model.Job{},
 		&model.JobKeyword{},
 		&model.JobRun{},

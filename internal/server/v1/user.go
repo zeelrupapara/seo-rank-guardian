@@ -83,6 +83,7 @@ func (h *HttpServer) UpdateProfile(c *fiber.Ctx) error {
 		return httputil.ErrorResponse(c, fiber.StatusInternalServerError, apperrors.ErrInternalServer.Error(), "Failed to update profile")
 	}
 
+	h.writeAudit(c, userID, user.Username, "user.update_profile", "user", fmtID(userID), map[string]any{"username": user.Username})
 	return httputil.SuccessResponse(c, fiber.StatusOK, user, "Profile updated")
 }
 
@@ -150,6 +151,7 @@ func (h *HttpServer) UploadAvatar(c *fiber.Ctx) error {
 		return httputil.ErrorResponse(c, fiber.StatusInternalServerError, apperrors.ErrInternalServer.Error(), "Failed to update avatar")
 	}
 
+	h.writeAudit(c, userID, user.Username, "user.upload_avatar", "user", fmtID(userID), nil)
 	return httputil.SuccessResponse(c, fiber.StatusOK, user, "Avatar uploaded successfully")
 }
 
@@ -186,6 +188,7 @@ func (h *HttpServer) RemoveAvatar(c *fiber.Ctx) error {
 		return httputil.ErrorResponse(c, fiber.StatusInternalServerError, apperrors.ErrInternalServer.Error(), "Failed to remove avatar")
 	}
 
+	h.writeAudit(c, userID, user.Username, "user.remove_avatar", "user", fmtID(userID), nil)
 	return httputil.SuccessResponse(c, fiber.StatusOK, user, "Avatar removed successfully")
 }
 
@@ -248,5 +251,20 @@ func (h *HttpServer) ChangePassword(c *fiber.Ctx) error {
 		return httputil.ErrorResponse(c, fiber.StatusInternalServerError, apperrors.ErrInternalServer.Error(), "Failed to update password")
 	}
 
+	// Revoke all OTHER active sessions so devices using the old password are logged out
+	currentSessionID, _ := c.Locals("sessionId").(string)
+	var otherSessions []model.Session
+	h.DB.Where("user_id = ? AND id != ? AND revoked_at IS NULL", userID, currentSessionID).Find(&otherSessions)
+	now := time.Now()
+	for _, s := range otherSessions {
+		_ = h.OAuth2.RevokeSession(s.ID)
+		_ = h.OAuth2.MarkSessionRevoked(s.ID)
+		h.DB.Model(&s).Updates(map[string]any{
+			"revoked_at": now,
+			"revoked_by": userID,
+		})
+	}
+
+	h.writeAudit(c, userID, user.Username, "user.change_password", "user", fmtID(userID), nil)
 	return httputil.SuccessResponse(c, fiber.StatusOK, nil, "Password changed successfully")
 }

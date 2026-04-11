@@ -18,8 +18,9 @@ type TokenPair struct {
 }
 
 type TokenClaims struct {
-	UserID uint   `json:"user_id"`
-	Role   string `json:"role"`
+	UserID    uint   `json:"user_id"`
+	Role      string `json:"role"`
+	SessionID string `json:"session_id"`
 	jwt.RegisteredClaims
 }
 
@@ -53,19 +54,26 @@ func NewOAuth2(cfg config.OAuthConfig, redisClient *redis.Client, log *zap.Sugar
 	}, nil
 }
 
-func (o *OAuth2) GenerateTokenPair(userID uint, role string) (*TokenPair, error) {
-	accessToken, err := o.generateToken(userID, role, o.accessSecret, o.accessExpiry)
+// RefreshExpiry returns the configured refresh token duration (used by session creation).
+func (o *OAuth2) RefreshExpiry() time.Duration {
+	return o.refreshExpiry
+}
+
+// GenerateTokenPair creates an access + refresh token pair for a given session.
+// The sessionID is embedded in both tokens and used as the Redis key.
+func (o *OAuth2) GenerateTokenPair(userID uint, role string, sessionID string) (*TokenPair, error) {
+	accessToken, err := o.generateToken(userID, role, sessionID, o.accessSecret, o.accessExpiry)
 	if err != nil {
 		return nil, err
 	}
 
-	refreshToken, err := o.generateToken(userID, role, o.refreshSecret, o.refreshExpiry)
+	refreshToken, err := o.generateToken(userID, role, sessionID, o.refreshSecret, o.refreshExpiry)
 	if err != nil {
 		return nil, err
 	}
 
 	ctx := context.Background()
-	key := fmt.Sprintf("session:%d", userID)
+	key := fmt.Sprintf("session:%s", sessionID)
 	if err := o.redis.Set(ctx, key, refreshToken, o.refreshExpiry).Err(); err != nil {
 		return nil, err
 	}
@@ -87,7 +95,7 @@ func (o *OAuth2) ValidateRefreshToken(tokenStr string) (*TokenClaims, error) {
 	}
 
 	ctx := context.Background()
-	key := fmt.Sprintf("session:%d", claims.UserID)
+	key := fmt.Sprintf("session:%s", claims.SessionID)
 
 	// Atomic get-and-delete to prevent token replay
 	pipe := o.redis.TxPipeline()
@@ -105,16 +113,46 @@ func (o *OAuth2) ValidateRefreshToken(tokenStr string) (*TokenClaims, error) {
 	return claims, nil
 }
 
-func (o *OAuth2) RevokeSession(userID uint) error {
+// RevokeSession removes the refresh token from Redis for the given session.
+func (o *OAuth2) RevokeSession(sessionID string) error {
 	ctx := context.Background()
-	key := fmt.Sprintf("session:%d", userID)
+	key := fmt.Sprintf("session:%s", sessionID)
 	return o.redis.Del(ctx, key).Err()
 }
 
-func (o *OAuth2) generateToken(userID uint, role, secret string, expiry time.Duration) (string, error) {
+// MarkSessionRevoked writes a short-lived sentinel key so the Protect() middleware
+// can immediately reject access tokens for this session (within the access token TTL window).
+// Only needed for admin force-revoke — self-logout doesn't need this since the caller
+// is handing in their own token right now.
+func (o *OAuth2) MarkSessionRevoked(sessionID string) error {
+	ctx := context.Background()
+	key := fmt.Sprintf("revoked:%s", sessionID)
+	return o.redis.Set(ctx, key, "1", o.accessExpiry).Err()
+}
+
+// IsSessionRevoked checks whether an admin has force-revoked this session.
+// Returns false (not revoked) on Redis errors to keep the system available during outages.
+func (o *OAuth2) IsSessionRevoked(sessionID string) (bool, error) {
+	if sessionID == "" {
+		return false, nil
+	}
+	ctx := context.Background()
+	key := fmt.Sprintf("revoked:%s", sessionID)
+	err := o.redis.Get(ctx, key).Err()
+	if err == redis.Nil {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func (o *OAuth2) generateToken(userID uint, role, sessionID, secret string, expiry time.Duration) (string, error) {
 	claims := TokenClaims{
-		UserID: userID,
-		Role:   role,
+		UserID:    userID,
+		Role:      role,
+		SessionID: sessionID,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   strconv.FormatUint(uint64(userID), 10),
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(expiry)),

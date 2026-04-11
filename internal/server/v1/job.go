@@ -112,6 +112,9 @@ func (h *HttpServer) CreateJob(c *fiber.Ctx) error {
 		h.Scheduler.AddJob(job)
 	}
 
+	var actingUser model.User
+	h.DB.Select("username").First(&actingUser, userID)
+	h.writeAudit(c, userID, actingUser.Username, "job.create", "job", fmtID(job.ID), map[string]any{"job_name": job.Name, "domain": job.Domain})
 	return httputil.SuccessResponse(c, fiber.StatusCreated, job, "Job created successfully")
 }
 
@@ -417,6 +420,9 @@ func (h *HttpServer) UpdateJob(c *fiber.Ctx) error {
 		h.Scheduler.AddJob(job)
 	}
 
+	var actingUser model.User
+	h.DB.Select("username").First(&actingUser, userID)
+	h.writeAudit(c, userID, actingUser.Username, "job.update", "job", fmtID64(jobID), map[string]any{"job_name": job.Name})
 	return httputil.SuccessResponse(c, fiber.StatusOK, job, "Job updated successfully")
 }
 
@@ -443,6 +449,10 @@ func (h *HttpServer) DeleteJob(c *fiber.Ctx) error {
 		return httputil.ErrorResponse(c, fiber.StatusBadRequest, apperrors.ErrBadRequest.Error(), "Invalid job ID")
 	}
 
+	// Fetch job name before deletion for audit log
+	var jobToDelete model.Job
+	h.DB.Select("name").Where("id = ? AND user_id = ?", jobID, userID).First(&jobToDelete)
+
 	result := h.DB.Where("id = ? AND user_id = ?", jobID, userID).Delete(&model.Job{})
 	if result.Error != nil {
 		return httputil.ErrorResponse(c, fiber.StatusInternalServerError, apperrors.ErrInternalServer.Error(), "Failed to delete job")
@@ -455,6 +465,9 @@ func (h *HttpServer) DeleteJob(c *fiber.Ctx) error {
 		h.Scheduler.RemoveJob(uint(jobID))
 	}
 
+	var actingUser model.User
+	h.DB.Select("username").First(&actingUser, userID)
+	h.writeAudit(c, userID, actingUser.Username, "job.delete", "job", fmtID64(jobID), map[string]any{"job_name": jobToDelete.Name})
 	return httputil.SuccessResponse(c, fiber.StatusOK, nil, "Job deleted successfully")
 }
 
@@ -618,6 +631,9 @@ func (h *HttpServer) TriggerScrape(c *fiber.Ctx) error {
 		return httputil.ErrorResponse(c, fiber.StatusInternalServerError, apperrors.ErrInternalServer.Error(), "Failed to create run")
 	}
 
+	var actingUser model.User
+	h.DB.Select("username").First(&actingUser, userID)
+	h.writeAudit(c, userID, actingUser.Username, "job.trigger_scan", "job", fmtID64(jobID), map[string]any{"job_name": job.Name, "triggered_by": "manual"})
 	return httputil.SuccessResponse(c, fiber.StatusCreated, fiber.Map{
 		"run":         run,
 		"total_pairs": run.TotalPairs,

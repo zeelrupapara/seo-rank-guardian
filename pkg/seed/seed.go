@@ -37,6 +37,23 @@ func Run(db *gorm.DB, az *authz.Authz, log *zap.SugaredLogger) error {
 		{"admin", authz.ResourcePolicies, authz.ActionRead},
 		{"admin", authz.ResourcePolicies, authz.ActionWrite},
 		{"admin", authz.ResourcePolicies, authz.ActionDelete},
+		{"admin", authz.ResourceSessions, authz.ActionRead},
+		{"admin", authz.ResourceSessions, authz.ActionDelete},
+		{"admin", authz.ResourceAudit, authz.ActionRead},
+		{"admin", authz.ResourceIPFilters, authz.ActionRead},
+		{"admin", authz.ResourceIPFilters, authz.ActionWrite},
+		{"admin", authz.ResourceIPFilters, authz.ActionDelete},
+		{"admin", authz.ResourceRateLimits, authz.ActionRead},
+		{"admin", authz.ResourceRateLimits, authz.ActionWrite},
+		{"admin", authz.ResourceRateLimits, authz.ActionDelete},
+
+		// bot_detection resource
+		{"admin", authz.ResourceBotDetection, authz.ActionRead},
+		{"admin", authz.ResourceBotDetection, authz.ActionWrite},
+		{"admin", authz.ResourceBotDetection, authz.ActionDelete},
+
+		// analytics resource
+		{"admin", authz.ResourceAnalytics, authz.ActionRead},
 	}
 
 	for _, p := range policies {
