@@ -19,6 +19,9 @@ func (h *HttpServer) RegisterV1() {
 	// IP filter middleware runs before all routes — blocks/allows IPs before auth
 	v1.Use(h.IPFilterMiddleware())
 
+	// Auto IP block middleware runs after IP filter — blocks IPs that accumulated too many rate-limit violations
+	v1.Use(h.AutoIPBlockMiddleware())
+
 	// Bot detection middleware runs after IP filter — blocks automated scripts and headless browsers
 	v1.Use(h.BotDetectionMiddleware())
 
@@ -123,6 +126,20 @@ func (h *HttpServer) RegisterV1() {
 	adminBotDetection.Post("/", h.Middleware.Authorize(authz.ResourceBotDetection, authz.ActionWrite), h.AdminCreateBotDetectionRule)
 	adminBotDetection.Put("/:id", h.Middleware.Authorize(authz.ResourceBotDetection, authz.ActionWrite), h.AdminToggleBotDetectionRule)
 	adminBotDetection.Delete("/:id", h.Middleware.Authorize(authz.ResourceBotDetection, authz.ActionDelete), h.AdminDeleteBotDetectionRule)
+
+	// IP block escalation policies — resource: ip_block_policies
+	adminIPBlockPolicies := admin.Group("/ip-block-policies")
+	adminIPBlockPolicies.Get("/", h.Middleware.Authorize(authz.ResourceIPBlockPolicies, authz.ActionRead), h.AdminListIPBlockPolicies)
+	adminIPBlockPolicies.Post("/", h.Middleware.Authorize(authz.ResourceIPBlockPolicies, authz.ActionWrite), h.AdminCreateIPBlockPolicy)
+	adminIPBlockPolicies.Put("/:id", h.Middleware.Authorize(authz.ResourceIPBlockPolicies, authz.ActionWrite), h.AdminUpdateIPBlockPolicy)
+	adminIPBlockPolicies.Patch("/:id/toggle", h.Middleware.Authorize(authz.ResourceIPBlockPolicies, authz.ActionWrite), h.AdminToggleIPBlockPolicy)
+	adminIPBlockPolicies.Delete("/:id", h.Middleware.Authorize(authz.ResourceIPBlockPolicies, authz.ActionDelete), h.AdminDeleteIPBlockPolicy)
+
+	// Auto-blocked IPs — resource: auto_ip_blocks
+	adminAutoBlocks := admin.Group("/auto-ip-blocks")
+	adminAutoBlocks.Get("/", h.Middleware.Authorize(authz.ResourceAutoIPBlocks, authz.ActionRead), h.AdminListAutoIPBlocks)
+	adminAutoBlocks.Delete("/:id", h.Middleware.Authorize(authz.ResourceAutoIPBlocks, authz.ActionDelete), h.AdminUnblockIP)
+	adminAutoBlocks.Post("/:id/reset", h.Middleware.Authorize(authz.ResourceAutoIPBlocks, authz.ActionWrite), h.AdminResetIPCounts)
 
 	// Policy management — resource: policies
 	admin.Get("/policies", h.Middleware.Authorize(authz.ResourcePolicies, authz.ActionRead), h.AdminListPolicies)

@@ -48,3 +48,18 @@ func (c *Cache) Delete(ctx context.Context, key string) error {
 func (c *Cache) IncrWithExpiry(ctx context.Context, key string, expiry time.Duration) (int64, error) {
 	return luaIncrExpire.Run(ctx, c.client, []string{key}, int(expiry.Seconds())).Int64()
 }
+
+// GetInt reads a plain-integer Redis value (e.g. one written by INCR).
+// Returns 0 if the key does not exist.
+func (c *Cache) GetInt(ctx context.Context, key string) (int64, error) {
+	val, err := c.client.Get(ctx, key).Int64()
+	if err == redis.Nil {
+		return 0, nil
+	}
+	return val, err
+}
+
+// SetInt stores a plain integer with the given expiry.
+func (c *Cache) SetInt(ctx context.Context, key string, val int64, expiry time.Duration) error {
+	return c.client.Set(ctx, key, val, expiry).Err()
+}

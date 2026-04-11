@@ -17,10 +17,12 @@ const (
 	ResourcePolicies  = "policies"
 	ResourceSessions  = "sessions"
 	ResourceAudit     = "audit"
-	ResourceIPFilters    = "ip_filters"
-	ResourceRateLimits   = "rate_limits"
-	ResourceBotDetection = "bot_detection"
-	ResourceAnalytics    = "analytics"
+	ResourceIPFilters       = "ip_filters"
+	ResourceRateLimits      = "rate_limits"
+	ResourceBotDetection    = "bot_detection"
+	ResourceAnalytics       = "analytics"
+	ResourceIPBlockPolicies = "ip_block_policies"
+	ResourceAutoIPBlocks    = "auto_ip_blocks"
 
 	ActionRead   = "read"
 	ActionWrite  = "write"
@@ -28,7 +30,7 @@ const (
 )
 
 func AllResources() []string {
-	return []string{ResourceProfile, ResourceDashboard, ResourceJobs, ResourceRuns, ResourceReports, ResourceUsers, ResourcePolicies, ResourceSessions, ResourceAudit, ResourceIPFilters, ResourceRateLimits, ResourceBotDetection, ResourceAnalytics}
+	return []string{ResourceProfile, ResourceDashboard, ResourceJobs, ResourceRuns, ResourceReports, ResourceUsers, ResourcePolicies, ResourceSessions, ResourceAudit, ResourceIPFilters, ResourceRateLimits, ResourceBotDetection, ResourceAnalytics, ResourceIPBlockPolicies, ResourceAutoIPBlocks}
 }
 
 func AllActions() []string {

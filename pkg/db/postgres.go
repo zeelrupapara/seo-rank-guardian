@@ -56,6 +56,8 @@ func (p *PostgresDB) Migrate() error {
 		&model.IPFilter{},
 		&model.RateLimit{},
 		&model.BotDetectionRule{},
+		&model.IPBlockPolicy{},
+		&model.AutoIPBlock{},
 		&model.RequestLog{},
 		&model.Job{},
 		&model.JobKeyword{},

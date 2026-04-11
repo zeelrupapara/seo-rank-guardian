@@ -67,6 +67,12 @@ func (h *HttpServer) RateLimitMiddleware() fiber.Handler {
 			c.Set("X-RateLimit-Remaining", strconv.Itoa(remaining))
 
 			if int(count) > rule.MaxRequests {
+				// Fire-and-forget: accumulate violation and potentially auto-block this IP.
+				// Admins are never auto-blocked — they share IPs with regular users.
+				if role != "admin" {
+					clientIP := c.IP()
+					go h.triggerAutoBlock(clientIP)
+				}
 				return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
 					"success": false,
 					"message": "Rate limit exceeded. Try again later.",

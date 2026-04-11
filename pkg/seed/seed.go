@@ -54,6 +54,16 @@ func Run(db *gorm.DB, az *authz.Authz, log *zap.SugaredLogger) error {
 
 		// analytics resource
 		{"admin", authz.ResourceAnalytics, authz.ActionRead},
+
+		// ip_block_policies resource
+		{"admin", authz.ResourceIPBlockPolicies, authz.ActionRead},
+		{"admin", authz.ResourceIPBlockPolicies, authz.ActionWrite},
+		{"admin", authz.ResourceIPBlockPolicies, authz.ActionDelete},
+
+		// auto_ip_blocks resource
+		{"admin", authz.ResourceAutoIPBlocks, authz.ActionRead},
+		{"admin", authz.ResourceAutoIPBlocks, authz.ActionWrite},
+		{"admin", authz.ResourceAutoIPBlocks, authz.ActionDelete},
 	}
 
 	for _, p := range policies {
