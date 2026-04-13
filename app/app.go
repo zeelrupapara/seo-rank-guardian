@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/signal"
@@ -16,7 +17,9 @@ import (
 	"github.com/zeelrupapara/seo-rank-guardian/pkg/db"
 	httputil "github.com/zeelrupapara/seo-rank-guardian/pkg/http"
 	"github.com/zeelrupapara/seo-rank-guardian/pkg/logger"
+	"github.com/zeelrupapara/seo-rank-guardian/pkg/logrotate"
 	"github.com/zeelrupapara/seo-rank-guardian/pkg/manager"
+	miniopkg "github.com/zeelrupapara/seo-rank-guardian/pkg/minio"
 	natspkg "github.com/zeelrupapara/seo-rank-guardian/pkg/nats"
 	pkgoauth2 "github.com/zeelrupapara/seo-rank-guardian/pkg/oauth2"
 	redispkg "github.com/zeelrupapara/seo-rank-guardian/pkg/redis"
@@ -30,7 +33,7 @@ func Start() error {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
-	log := logger.NewLogger(cfg.Logger)
+	log, rotatingWriter := logger.NewDynamicLogger(cfg.Logger)
 	defer log.Sync()
 
 	log.Info("Starting SEO Rank Guardian API server...")
@@ -109,6 +112,22 @@ func Start() error {
 	srv.HttpServer.Scheduler = sched
 	sched.Start()
 
+	// MinIO client for log uploads (non-fatal if unavailable).
+	var minioClient *miniopkg.Client
+	mc, err := miniopkg.New(cfg.MinIO, log)
+	if err != nil {
+		log.Warnf("MinIO init warning (log uploads disabled): %v", err)
+	} else {
+		if err := mc.EnsureBucket(context.Background()); err != nil {
+			log.Warnf("MinIO bucket init warning: %v", err)
+		} else {
+			minioClient = mc
+		}
+	}
+
+	logRotator := logrotate.New(minioClient, rotatingWriter, cfg.Logger.Dir, log)
+	logRotator.Start()
+
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
@@ -121,8 +140,9 @@ func Start() error {
 	}()
 
 	<-quit
-	log.Info("Shutting down server...")
+		log.Info("Shutting down server...")
 	sched.Stop()
+	logRotator.Stop()
 	natsClient.Close()
 	return app.Shutdown()
 }

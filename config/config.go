@@ -13,8 +13,9 @@ type Config struct {
 	NATS     NATSConfig
 	Logger   LoggerConfig
 	OAuth    OAuthConfig
-	SMTP   SMTPConfig
-	Google GoogleConfig
+	SMTP     SMTPConfig
+	Google   GoogleConfig
+	MinIO    MinIOConfig
 }
 
 type AppConfig struct {
@@ -49,10 +50,18 @@ type NATSConfig struct {
 
 type LoggerConfig struct {
 	Level      string `envconfig:"LOG_LEVEL" default:"debug"`
-	File       string `envconfig:"LOG_FILE" default:"logs/srg.log"`
+	Dir        string `envconfig:"LOG_DIR" default:"logs"`
 	MaxSize    int    `envconfig:"LOG_MAX_SIZE" default:"100"`
 	MaxBackups int    `envconfig:"LOG_MAX_BACKUPS" default:"3"`
 	MaxAge     int    `envconfig:"LOG_MAX_AGE" default:"30"`
+}
+
+type MinIOConfig struct {
+	Endpoint  string `envconfig:"MINIO_ENDPOINT" default:"localhost:9000"`
+	AccessKey string `envconfig:"MINIO_ACCESS_KEY" default:"minioadmin"`
+	SecretKey string `envconfig:"MINIO_SECRET_KEY" default:"minioadmin"`
+	Bucket    string `envconfig:"MINIO_BUCKET" default:"srg-logs"`
+	UseSSL    bool   `envconfig:"MINIO_USE_SSL" default:"false"`
 }
 
 type OAuthConfig struct {
@@ -106,6 +115,9 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 	if err := envconfig.Process("", &cfg.Google); err != nil {
+		return nil, err
+	}
+	if err := envconfig.Process("", &cfg.MinIO); err != nil {
 		return nil, err
 	}
 	return cfg, nil
