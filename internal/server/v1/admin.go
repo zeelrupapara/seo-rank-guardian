@@ -248,6 +248,10 @@ func (h *HttpServer) AdminCreateUser(c *fiber.Ctx) error {
 		return httputil.ErrorResponse(c, fiber.StatusInternalServerError, apperrors.ErrInternalServer.Error(), "Failed to create user")
 	}
 
+	adminID, _ := c.Locals("userId").(uint)
+	var adminUser model.User
+	h.DB.Select("username").First(&adminUser, adminID)
+	h.writeAudit(c, adminID, adminUser.Username, "admin.create_user", "user", fmtID(user.ID), map[string]any{"username": user.Username, "email": user.Email, "role": user.Role})
 	return httputil.SuccessResponse(c, fiber.StatusCreated, user, "User created successfully")
 }
 
@@ -291,11 +295,15 @@ func (h *HttpServer) AdminUpdateUserRole(c *fiber.Ctx) error {
 		return httputil.ErrorResponse(c, fiber.StatusNotFound, apperrors.ErrUserNotFound.Error(), "User not found")
 	}
 
+	fromRole := user.Role
 	user.Role = req.Role
 	if err := h.DB.Save(&user).Error; err != nil {
 		return httputil.ErrorResponse(c, fiber.StatusInternalServerError, apperrors.ErrInternalServer.Error(), "Failed to update role")
 	}
 
+	var adminUser model.User
+	h.DB.Select("username").First(&adminUser, currentUserID)
+	h.writeAudit(c, currentUserID, adminUser.Username, "admin.update_role", "user", fmtID64(targetID), map[string]any{"target_user": user.Username, "from_role": fromRole, "to_role": req.Role})
 	return httputil.SuccessResponse(c, fiber.StatusOK, user, "User role updated")
 }
 
@@ -327,6 +335,9 @@ func (h *HttpServer) AdminUpdateUserStatus(c *fiber.Ctx) error {
 		return httputil.ErrorResponse(c, fiber.StatusInternalServerError, apperrors.ErrInternalServer.Error(), "Failed to update status")
 	}
 
+	var adminUser model.User
+	h.DB.Select("username").First(&adminUser, currentUserID)
+	h.writeAudit(c, currentUserID, adminUser.Username, "admin.update_status", "user", fmtID64(targetID), map[string]any{"target_user": user.Username, "is_active": req.IsActive})
 	return httputil.SuccessResponse(c, fiber.StatusOK, user, "User status updated")
 }
 
@@ -352,6 +363,9 @@ func (h *HttpServer) AdminDeleteUser(c *fiber.Ctx) error {
 		return httputil.ErrorResponse(c, fiber.StatusInternalServerError, apperrors.ErrInternalServer.Error(), "Failed to delete user")
 	}
 
+	var adminUser model.User
+	h.DB.Select("username").First(&adminUser, currentUserID)
+	h.writeAudit(c, currentUserID, adminUser.Username, "admin.delete_user", "user", fmtID64(targetID), map[string]any{"target_user": user.Username})
 	return httputil.SuccessResponse(c, fiber.StatusOK, nil, "User deleted successfully")
 }
 
@@ -528,6 +542,10 @@ func (h *HttpServer) AdminAddPolicy(c *fiber.Ctx) error {
 		return httputil.ErrorResponse(c, fiber.StatusConflict, apperrors.ErrConflict.Error(), "Policy already exists")
 	}
 
+	adminID, _ := c.Locals("userId").(uint)
+	var adminUser model.User
+	h.DB.Select("username").First(&adminUser, adminID)
+	h.writeAudit(c, adminID, adminUser.Username, "admin.add_policy", "policy", req.Role, map[string]any{"role": req.Role, "resource": req.Resource, "action": req.Action})
 	return httputil.SuccessResponse(c, fiber.StatusCreated, fiber.Map{
 		"role": req.Role, "resource": req.Resource, "action": req.Action,
 	}, "Policy added")
@@ -556,6 +574,10 @@ func (h *HttpServer) AdminRemovePolicy(c *fiber.Ctx) error {
 		return httputil.ErrorResponse(c, fiber.StatusNotFound, apperrors.ErrNotFound.Error(), "Policy not found")
 	}
 
+	adminID, _ := c.Locals("userId").(uint)
+	var adminUser model.User
+	h.DB.Select("username").First(&adminUser, adminID)
+	h.writeAudit(c, adminID, adminUser.Username, "admin.remove_policy", "policy", req.Role, map[string]any{"role": req.Role, "resource": req.Resource, "action": req.Action})
 	return httputil.SuccessResponse(c, fiber.StatusOK, nil, "Policy removed")
 }
 
@@ -591,4 +613,152 @@ func (h *HttpServer) AdminListRoles(c *fiber.Ctx) error {
 	}
 
 	return httputil.SuccessResponse(c, fiber.StatusOK, roles, "Roles retrieved")
+}
+
+// --- Session Management ---
+
+type AdminSessionListItem struct {
+	ID           string     `json:"id"`
+	UserID       uint       `json:"user_id"`
+	Username     string     `json:"username"`
+	Email        string     `json:"email"`
+	IPAddress    string     `json:"ip_address"`
+	DeviceInfo   string     `json:"device_info"`
+	LoginMethod  string     `json:"login_method"`
+	CreatedAt    int64      `json:"created_at"`
+	LastActiveAt int64      `json:"last_active_at"`
+	ExpiresAt    int64      `json:"expires_at"`
+	RevokedAt    *time.Time `json:"revoked_at"`
+	IsActive     bool       `json:"is_active"`
+}
+
+// AdminListSessions godoc
+// @Summary List all sessions
+// @Description List all login sessions with optional filters
+// @Tags admin
+// @Produce json
+// @Security BearerAuth
+// @Param user_id query int false "Filter by user ID"
+// @Param status query string false "Filter by status: active, revoked"
+// @Param page query int false "Page number"
+// @Param limit query int false "Page size"
+// @Success 200 {object} PaginatedResponse
+// @Router /admin/sessions [get]
+func (h *HttpServer) AdminListSessions(c *fiber.Ctx) error {
+	page, pageSize := parsePagination(c)
+	offset := (page - 1) * pageSize
+
+	query := h.DB.Model(&model.Session{})
+
+	if userIDStr := c.Query("user_id"); userIDStr != "" {
+		uid, err := strconv.ParseUint(userIDStr, 10, 64)
+		if err == nil {
+			query = query.Where("user_id = ?", uid)
+		}
+	}
+
+	status := c.Query("status")
+	now := time.Now().UnixNano()
+	switch status {
+	case "active":
+		query = query.Where("revoked_at IS NULL AND expires_at > ?", now)
+	case "revoked":
+		query = query.Where("revoked_at IS NOT NULL")
+	}
+
+	var total int64
+	query.Count(&total)
+
+	var sessions []model.Session
+	if err := query.Order("created_at DESC").Offset(offset).Limit(pageSize).Find(&sessions).Error; err != nil {
+		return httputil.ErrorResponse(c, fiber.StatusInternalServerError, apperrors.ErrInternalServer.Error(), "Failed to list sessions")
+	}
+
+	// Batch-load user info
+	userIDs := make(map[uint]bool)
+	for _, s := range sessions {
+		userIDs[s.UserID] = true
+	}
+	ids := make([]uint, 0, len(userIDs))
+	for id := range userIDs {
+		ids = append(ids, id)
+	}
+	var users []model.User
+	if len(ids) > 0 {
+		h.DB.Where("id IN ?", ids).Find(&users)
+	}
+	userMap := make(map[uint]model.User)
+	for _, u := range users {
+		userMap[u.ID] = u
+	}
+
+	items := make([]AdminSessionListItem, 0, len(sessions))
+	for _, s := range sessions {
+		u := userMap[s.UserID]
+		items = append(items, AdminSessionListItem{
+			ID:           s.ID,
+			UserID:       s.UserID,
+			Username:     u.Username,
+			Email:        u.Email,
+			IPAddress:    s.IPAddress,
+			DeviceInfo:   s.DeviceInfo,
+			LoginMethod:  s.LoginMethod,
+			CreatedAt:    s.CreatedAt,
+			LastActiveAt: s.LastActiveAt,
+			ExpiresAt:    s.ExpiresAt,
+			RevokedAt:    s.RevokedAt,
+			IsActive:     s.RevokedAt == nil && s.ExpiresAt > now,
+		})
+	}
+
+	return httputil.SuccessResponse(c, fiber.StatusOK, fiber.Map{
+		"items": items,
+		"total": total,
+		"page":  page,
+		"limit": pageSize,
+	}, "Sessions retrieved")
+}
+
+// AdminRevokeSession godoc
+// @Summary Revoke a session
+// @Description Immediately revoke a user session (admin action)
+// @Tags admin
+// @Produce json
+// @Security BearerAuth
+// @Param sessionId path string true "Session ID"
+// @Success 200 {object} MessageResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Router /admin/sessions/{sessionId} [delete]
+func (h *HttpServer) AdminRevokeSession(c *fiber.Ctx) error {
+	adminID, _ := c.Locals("userId").(uint)
+	sessionID := c.Params("sessionId")
+
+	var session model.Session
+	if err := h.DB.First(&session, "id = ?", sessionID).Error; err != nil {
+		return httputil.ErrorResponse(c, fiber.StatusNotFound, apperrors.ErrNotFound.Error(), "Session not found")
+	}
+
+	if session.RevokedAt != nil {
+		return httputil.ErrorResponse(c, fiber.StatusBadRequest, apperrors.ErrBadRequest.Error(), "Session is already revoked")
+	}
+
+	// Remove refresh token from Redis so the session cannot be renewed
+	_ = h.OAuth2.RevokeSession(sessionID)
+	// Write revocation sentinel so the access token is rejected immediately (within its TTL)
+	_ = h.OAuth2.MarkSessionRevoked(sessionID)
+
+	now := time.Now()
+	h.DB.Model(&session).Updates(map[string]any{
+		"revoked_at": now,
+		"revoked_by": adminID,
+	})
+
+	// Fetch target username for the audit log
+	var targetUser model.User
+	h.DB.Select("username").First(&targetUser, session.UserID)
+	var adminUser model.User
+	h.DB.Select("username").First(&adminUser, adminID)
+	h.writeAudit(c, adminID, adminUser.Username, "admin.revoke_session", "session", sessionID, map[string]any{"target_user": targetUser.Username, "device_info": session.DeviceInfo})
+	return httputil.SuccessResponse(c, fiber.StatusOK, nil, "Session revoked successfully")
 }

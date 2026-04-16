@@ -37,6 +37,33 @@ func Run(db *gorm.DB, az *authz.Authz, log *zap.SugaredLogger) error {
 		{"admin", authz.ResourcePolicies, authz.ActionRead},
 		{"admin", authz.ResourcePolicies, authz.ActionWrite},
 		{"admin", authz.ResourcePolicies, authz.ActionDelete},
+		{"admin", authz.ResourceSessions, authz.ActionRead},
+		{"admin", authz.ResourceSessions, authz.ActionDelete},
+		{"admin", authz.ResourceAudit, authz.ActionRead},
+		{"admin", authz.ResourceIPFilters, authz.ActionRead},
+		{"admin", authz.ResourceIPFilters, authz.ActionWrite},
+		{"admin", authz.ResourceIPFilters, authz.ActionDelete},
+		{"admin", authz.ResourceRateLimits, authz.ActionRead},
+		{"admin", authz.ResourceRateLimits, authz.ActionWrite},
+		{"admin", authz.ResourceRateLimits, authz.ActionDelete},
+
+		// bot_detection resource
+		{"admin", authz.ResourceBotDetection, authz.ActionRead},
+		{"admin", authz.ResourceBotDetection, authz.ActionWrite},
+		{"admin", authz.ResourceBotDetection, authz.ActionDelete},
+
+		// analytics resource
+		{"admin", authz.ResourceAnalytics, authz.ActionRead},
+
+		// ip_block_policies resource
+		{"admin", authz.ResourceIPBlockPolicies, authz.ActionRead},
+		{"admin", authz.ResourceIPBlockPolicies, authz.ActionWrite},
+		{"admin", authz.ResourceIPBlockPolicies, authz.ActionDelete},
+
+		// auto_ip_blocks resource
+		{"admin", authz.ResourceAutoIPBlocks, authz.ActionRead},
+		{"admin", authz.ResourceAutoIPBlocks, authz.ActionWrite},
+		{"admin", authz.ResourceAutoIPBlocks, authz.ActionDelete},
 	}
 
 	for _, p := range policies {
