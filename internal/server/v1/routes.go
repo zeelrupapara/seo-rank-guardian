@@ -63,6 +63,7 @@ func (h *HttpServer) RegisterV1() {
 	jobs.Get("/", h.Middleware.Authorize(authz.ResourceJobs, authz.ActionRead), h.ListJobs)
 	jobs.Get("/:jobId", h.Middleware.Authorize(authz.ResourceJobs, authz.ActionRead), h.GetJob)
 	jobs.Put("/:jobId", h.Middleware.Authorize(authz.ResourceJobs, authz.ActionWrite), h.UpdateJob)
+	jobs.Patch("/:jobId/status", h.Middleware.Authorize(authz.ResourceJobs, authz.ActionWrite), h.PatchJobStatus)
 	jobs.Delete("/:jobId", h.Middleware.Authorize(authz.ResourceJobs, authz.ActionDelete), h.DeleteJob)
 	jobs.Post("/:jobId/scrape", h.Middleware.Authorize(authz.ResourceJobs, authz.ActionWrite), h.TriggerScrape)
 	jobs.Get("/:jobId/stats", h.Middleware.Authorize(authz.ResourceJobs, authz.ActionRead), h.JobStats)

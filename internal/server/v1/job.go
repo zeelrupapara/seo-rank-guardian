@@ -426,6 +426,59 @@ func (h *HttpServer) UpdateJob(c *fiber.Ctx) error {
 	return httputil.SuccessResponse(c, fiber.StatusOK, job, "Job updated successfully")
 }
 
+type PatchJobStatusRequest struct {
+	IsActive bool `json:"is_active"`
+}
+
+// PatchJobStatus godoc
+// @Summary Toggle job active status
+// @Description Activate or deactivate a job without modifying other fields
+// @Tags jobs
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param jobId path int true "Job ID"
+// @Param body body PatchJobStatusRequest true "Status update"
+// @Success 200 {object} JobResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Router /jobs/{jobId}/status [patch]
+func (h *HttpServer) PatchJobStatus(c *fiber.Ctx) error {
+	userID, ok := c.Locals("userId").(uint)
+	if !ok {
+		return httputil.ErrorResponse(c, fiber.StatusUnauthorized, apperrors.ErrUnauthorized.Error(), "Unauthorized")
+	}
+
+	jobID, err := strconv.ParseUint(c.Params("jobId"), 10, 64)
+	if err != nil {
+		return httputil.ErrorResponse(c, fiber.StatusBadRequest, apperrors.ErrBadRequest.Error(), "Invalid job ID")
+	}
+
+	var job model.Job
+	if err := h.DB.Where("id = ? AND user_id = ?", jobID, userID).First(&job).Error; err != nil {
+		return httputil.ErrorResponse(c, fiber.StatusNotFound, apperrors.ErrJobNotFound.Error(), "Job not found")
+	}
+
+	var req PatchJobStatusRequest
+	if err := c.BodyParser(&req); err != nil {
+		return httputil.ErrorResponse(c, fiber.StatusBadRequest, apperrors.ErrBadRequest.Error(), "Invalid request body")
+	}
+
+	job.IsActive = req.IsActive
+	job.UpdatedBy = userID
+
+	if err := h.DB.Save(&job).Error; err != nil {
+		return httputil.ErrorResponse(c, fiber.StatusInternalServerError, apperrors.ErrInternalServer.Error(), "Failed to update job status")
+	}
+
+	if h.Scheduler != nil {
+		h.Scheduler.AddJob(job)
+	}
+
+	return httputil.SuccessResponse(c, fiber.StatusOK, job, "Job status updated successfully")
+}
+
 // DeleteJob godoc
 // @Summary Delete a job
 // @Description Soft delete a job configuration
