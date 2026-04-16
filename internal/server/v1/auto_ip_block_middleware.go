@@ -24,6 +24,7 @@ const (
 type autoBlockStatus struct {
 	Level        int   `json:"level"`
 	BlockedUntil int64 `json:"blocked_until"` // unix timestamp
+	IsPermanent  bool  `json:"is_permanent"`
 }
 
 // AutoIPBlockMiddleware checks whether the client IP is currently under an automatic
@@ -53,6 +54,12 @@ func (h *HttpServer) AutoIPBlockMiddleware() fiber.Handler {
 		}
 
 		// Key exists — IP is blocked
+		if status.IsPermanent {
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+				"success": false,
+				"message": "Your IP has been permanently blocked. Contact support to appeal.",
+			})
+		}
 		blockedUntil := time.Unix(status.BlockedUntil, 0)
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
 			"success": false,

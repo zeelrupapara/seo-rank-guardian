@@ -7,8 +7,9 @@ import "time"
 type AutoIPBlock struct {
 	CommonModel
 	IPAddress    string     `json:"ip_address"   gorm:"size:50;not null;uniqueIndex"`
-	BlockLevel   int        `json:"block_level"`               // 1=5min, 2=10min, 3=1month
+	BlockLevel   int        `json:"block_level"`               // 1=5min, 2=10min, 3=1month, 4=permanent
 	BlockedUntil time.Time  `json:"blocked_until"`
+	IsPermanent  bool       `json:"is_permanent"  gorm:"default:false;not null"` // admin-set permanent block
 	L1Count      int        `json:"l1_count"`                  // cumulative L1 blocks for this IP
 	L2Count      int        `json:"l2_count"`                  // cumulative L2 blocks for this IP
 	IsActive     bool       `json:"is_active"    gorm:"default:true;not null"`

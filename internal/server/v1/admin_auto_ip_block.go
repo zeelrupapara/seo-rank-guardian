@@ -12,6 +12,8 @@ import (
 	httputil "github.com/zeelrupapara/seo-rank-guardian/pkg/http"
 )
 
+const permanentBlockTTL = 100 * 365 * 24 * time.Hour // ~100 years
+
 // AdminListAutoIPBlocks godoc
 // @Summary List auto-blocked IPs
 // @Tags admin
@@ -103,6 +105,57 @@ func (h *HttpServer) AdminUnblockIP(c *fiber.Ctx) error {
 	})
 
 	return httputil.SuccessResponse(c, fiber.StatusOK, block, "IP unblocked successfully")
+}
+
+// AdminPermanentBlockIP godoc
+// @Summary Permanently block an IP address
+// @Tags admin
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "AutoIPBlock record ID"
+// @Success 200
+// @Router /admin/auto-ip-blocks/{id}/permanent [post]
+func (h *HttpServer) AdminPermanentBlockIP(c *fiber.Ctx) error {
+	id, err := strconv.ParseUint(c.Params("id"), 10, 64)
+	if err != nil {
+		return httputil.ErrorResponse(c, fiber.StatusBadRequest, "invalid id", "Bad Request")
+	}
+
+	var block model.AutoIPBlock
+	if err := h.DB.First(&block, id).Error; err != nil {
+		return httputil.ErrorResponse(c, fiber.StatusNotFound, "record not found", "Not Found")
+	}
+
+	adminID, _ := c.Locals("userId").(uint)
+	permanentUntil := time.Now().Add(permanentBlockTTL)
+
+	block.IsPermanent = true
+	block.IsActive = true
+	block.BlockLevel = 4
+	block.BlockedUntil = permanentUntil
+	block.UnblockedAt = nil
+	block.UnblockedBy = 0
+	block.UpdatedBy = adminID
+
+	if err := h.DB.Save(&block).Error; err != nil {
+		return httputil.ErrorResponse(c, fiber.StatusInternalServerError, apperrors.ErrInternalServer.Error(), "Failed to permanently block IP")
+	}
+
+	// Set Redis key with ~100-year TTL so middleware enforces it
+	ctx := context.Background()
+	activeKey := fmt.Sprintf(autoBlockActiveFmt, block.IPAddress)
+	status := autoBlockStatus{Level: 4, BlockedUntil: permanentUntil.Unix(), IsPermanent: true}
+	if err := h.Cache.Set(ctx, activeKey, status, permanentBlockTTL); err != nil {
+		h.Log.Warnf("admin_permanent_block: Redis set error for %s: %v", block.IPAddress, err)
+	}
+
+	var adminUser model.User
+	h.DB.Select("username").First(&adminUser, adminID)
+	h.writeAudit(c, adminID, adminUser.Username, "admin.permanent_block_ip", "auto_ip_block", fmtID(block.ID), map[string]any{
+		"ip_address": block.IPAddress,
+	})
+
+	return httputil.SuccessResponse(c, fiber.StatusOK, block, "IP permanently blocked")
 }
 
 // AdminResetIPCounts godoc

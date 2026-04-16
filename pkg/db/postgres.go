@@ -53,7 +53,6 @@ func (p *PostgresDB) Migrate() error {
 		&model.User{},
 		&model.Session{},
 		&model.AuditLog{},
-		&model.IPFilter{},
 		&model.RateLimit{},
 		&model.BotDetectionRule{},
 		&model.IPBlockPolicy{},
